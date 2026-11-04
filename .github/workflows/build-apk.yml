@@ -18,9 +18,10 @@ jobs:
 
       - name: 钉住构建参数
         run: |
-          # python-for-android 的 2024.01.21 里 hostpython3 与 python3 都是 3.11.5，
-          # 与 pygame 2.6.1 是能对上的一代；master 已升到 3.14.2 会直接报错。
-          sed -i 's|^requirements *=.*|requirements = python3==3.11.5,pygame==2.6.1|' buildozer.spec
+          # python-for-android 的 v2024.01.21 里 hostpython3 与 python3 都是 3.11.5，
+          # 与 pygame 2.5.2 是能对上的一代；p4a 里的 pygame 配方本身是按 2.1.0 写的，
+          # pygame 2.6.1 太新（改了编译脚本），所以退到 2.5.2。
+          sed -i 's|^requirements *=.*|requirements = python3==3.11.5,pygame==2.5.2|' buildozer.spec
           sed -i '/^android.ndk *=/d; /^p4a.branch *=/d; /^p4a.source_dir *=/d; /^android.api *=/d' buildozer.spec
           sed -i '/^p4a.bootstrap *=/a android.ndk = 25b\np4a.branch = 2024.01.21\nandroid.api = 33\np4a.source_dir = '"$GITHUB_WORKSPACE"'/p4a-src' buildozer.spec
           echo "--- 最终生效的关键行 ---"
@@ -61,7 +62,7 @@ jobs:
           cd "$P4A"
           git remote add origin https://github.com/kivy/python-for-android.git
           ok=0
-          for ref in refs/tags/2024.01.21 refs/tags/v2024.01.21 refs/heads/2024.01.21; do
+          for ref in refs/tags/v2024.01.21 refs/tags/2024.01.21 refs/heads/2024.01.21; do
             echo "尝试取 $ref"
             if git fetch -q --depth 1 origin "+$ref:refs/tags/p4a-src"; then ok=1; break; fi
           done
@@ -72,8 +73,6 @@ jobs:
             exit 1
           fi
           git checkout -q -B 2024.01.21 FETCH_HEAD
-          echo "--- 本地分支 ---"
-          git branch -vv
           echo "--- 版本核对（应为 3.11.5 / 3.11.5）---"
           grep -m1 -E "^    version" pythonforandroid/recipes/hostpython3/__init__.py
           grep -m1 -E "^    version" pythonforandroid/recipes/python3/__init__.py
@@ -81,7 +80,6 @@ jobs:
           python3 -m pip install --user "appdirs" "colorama>=0.3.3" "jinja2" \
             "sh>=1.10,<2.0" "build" "toml" "packaging"
           python3 -c "import pythonforandroid; print('p4a 可导入:', pythonforandroid.__file__)"
-          du -sh "$P4A"
 
       - name: 构建 APK
         run: |
@@ -91,24 +89,24 @@ jobs:
           code=$?
           if [ -z "$(ls bin/*.apk 2>/dev/null)" ]; then
             echo "::error::没有产出 apk，buildozer 退出码 $code，日志 $(wc -l < build_out.log) 行"
-            echo "===== A. 日志开头 80 行 ====="
-            sed -n '1,80p' build_out.log
-            echo "===== B. 关键报错行 ====="
-            grep -nE "ERROR|error:|Error:|Traceback|fatal:|Command failed|No such file" build_out.log | head -40
-            echo "===== C. 失败命令前 40 行 ====="
-            ln=$(grep -n "Command failed" build_out.log | tail -1 | cut -d: -f1)
-            if [ -n "$ln" ]; then
-              start=$((ln-40))
-              [ "$start" -lt 1 ] && start=1
-              sed -n "${start},$((ln+1))p" build_out.log
-            else
-              echo "（日志里没有 Command failed，看末尾 60 行）"
-              tail -60 build_out.log
-            fi
+            echo "===== A. 最后在编哪个配方 ====="
+            grep -nE "Building recipe|Installing .* into|Recipe .* is already" build_out.log | tail -8
+            echo "===== B. 报错行（取最后 30 条）====="
+            grep -nE "error:|Error:|ERROR|fatal:|Traceback|Command failed|No such file" build_out.log | tail -30
+            echo "===== C. 日志最后 200 行原文 ====="
+            tail -200 build_out.log
             exit 1
           fi
           echo "===== 成功，日志末尾 30 行 ====="
           tail -30 build_out.log
+
+      - name: 失败时把完整日志存成文件
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 构建日志
+          path: build_out.log
+          if-no-files-found: ignore
 
       - name: 上传 APK
         if: success()
