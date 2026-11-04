@@ -18,10 +18,8 @@ jobs:
 
       - name: 钉住构建参数
         run: |
-          # 关键：python-for-android 的 tag 2024.01.21 里 hostpython3 与 python3 都是 3.11.5，
-          # 与 pygame 2.6.1 是能对上的一代。
-          # master 分支已升到 Python 3.14.2，会把 python3 顶成 3.14，于是报
-          # "python3 should have same version as hostpython3, 3.14.2"。
+          # python-for-android 的 tag 2024.01.21 里 hostpython3 与 python3 都是 3.11.5，
+          # 与 pygame 2.6.1 是能对上的一代；master 已升到 3.14.2 会直接报错。
           sed -i 's|^requirements *=.*|requirements = python3==3.11.5,pygame==2.6.1|' buildozer.spec
           sed -i '/^android.ndk *=/d; /^p4a.branch *=/d; /^android.api *=/d' buildozer.spec
           sed -i '/^p4a.bootstrap *=/a android.ndk = 25b\np4a.branch = 2024.01.21\nandroid.api = 33' buildozer.spec
@@ -56,19 +54,24 @@ jobs:
           set +e
           yes | buildozer -v android debug > build_out.log 2>&1
           code=$?
-          echo "buildozer 退出码 $code"
-          echo "--- 产物 ---"
-          ls -l bin/ 2>/dev/null || true
           if [ -z "$(ls bin/*.apk 2>/dev/null)" ]; then
-            echo "::error::没有产出 apk"
-            echo "===== 关键报错 ====="
-            grep -nE "ERROR|error:|Error|Traceback|fatal error|Build failed|No such file" build_out.log | tail -60 || true
-            echo "===== 日志末尾 120 行 ====="
-            tail -120 build_out.log
+            echo "::error::没有产出 apk，buildozer 退出码 $code，日志 $(wc -l < build_out.log) 行"
+            echo "===== A. 日志开头 80 行 ====="
+            sed -n '1,80p' build_out.log
+            echo "===== B. 失败命令前 40 行 ====="
+            ln=$(grep -n "Command failed" build_out.log | tail -1 | cut -d: -f1)
+            if [ -n "$ln" ]; then
+              start=$((ln-40))
+              [ "$start" -lt 1 ] && start=1
+              sed -n "${start},$((ln+1))p" build_out.log
+            else
+              echo "（日志里没有 Command failed，看末尾 40 行）"
+              tail -40 build_out.log
+            fi
             exit 1
           fi
-          echo "===== 日志末尾 40 行 ====="
-          tail -40 build_out.log
+          echo "===== 成功，日志末尾 30 行 ====="
+          tail -30 build_out.log
 
       - name: 上传 APK
         if: success()
