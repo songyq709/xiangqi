@@ -21,10 +21,10 @@ jobs:
           # python-for-android 的 2024.01.21 里 hostpython3 与 python3 都是 3.11.5，
           # 与 pygame 2.6.1 是能对上的一代；master 已升到 3.14.2 会直接报错。
           sed -i 's|^requirements *=.*|requirements = python3==3.11.5,pygame==2.6.1|' buildozer.spec
-          sed -i '/^android.ndk *=/d; /^p4a.branch *=/d; /^android.api *=/d' buildozer.spec
-          sed -i '/^p4a.bootstrap *=/a android.ndk = 25b\np4a.branch = 2024.01.21\nandroid.api = 33' buildozer.spec
+          sed -i '/^android.ndk *=/d; /^p4a.branch *=/d; /^p4a.source_dir *=/d; /^android.api *=/d' buildozer.spec
+          sed -i '/^p4a.bootstrap *=/a android.ndk = 25b\np4a.branch = 2024.01.21\nandroid.api = 33\np4a.source_dir = '"$GITHUB_WORKSPACE"'/p4a-src' buildozer.spec
           echo "--- 最终生效的关键行 ---"
-          grep -nE "^(requirements|android\.ndk|p4a\.branch|android\.api|android\.archs)" buildozer.spec
+          grep -nE "^(requirements|android\.ndk|p4a\.branch|p4a\.source_dir|android\.api|android\.archs)" buildozer.spec
 
       - name: 装 JDK 17
         uses: actions/setup-java@v4
@@ -49,15 +49,13 @@ jobs:
           buildozer --version
 
       # buildozer 内部用 `git clone -b 2024.01.21 --single-branch` 取 p4a，
-      # 这个写法在 GitHub 上取不到（第 6 次构建就是在这里失败的），
-      # 所以改成自己按 refs/tags 精确取，放到 buildozer 认的目录里；
-      # 分支名仍叫 2024.01.21，buildozer 核对 url/分支一致后会直接复用、不再 clone。
+      # 这个写法在 GitHub 上取不到（第 6、7 次构建都在这里失败），
+      # 所以改成自己按 refs/tags 精确取，再用 spec 里的 p4a.source_dir 直接指向它，
+      # buildozer 就不会再跑任何 git 逻辑。代价是 p4a 的运行依赖要我们自己装。
       - name: 预置 p4a 源码
         run: |
           set -e
-          PLAT="$HOME/.buildozer/android/platform"
-          P4A="$PLAT/python-for-android"
-          mkdir -p "$PLAT"
+          P4A="$GITHUB_WORKSPACE/p4a-src"
           rm -rf "$P4A"
           git init -q "$P4A"
           cd "$P4A"
@@ -79,6 +77,10 @@ jobs:
           echo "--- 版本核对（应为 3.11.5 / 3.11.5）---"
           grep -m1 -E "^    version" pythonforandroid/recipes/hostpython3/__init__.py
           grep -m1 -E "^    version" pythonforandroid/recipes/python3/__init__.py
+          echo "--- 装 p4a 运行依赖 ---"
+          python3 -m pip install --user "appdirs" "colorama>=0.3.3" "jinja2" \
+            "sh>=1.10,<2.0" "build" "toml" "packaging"
+          python3 -c "import pythonforandroid; print('p4a 可导入:', pythonforandroid.__file__)"
           du -sh "$P4A"
 
       - name: 构建 APK
