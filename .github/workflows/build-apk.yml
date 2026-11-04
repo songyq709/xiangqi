@@ -1,6 +1,6 @@
 name: 打包安卓 APK
 
-# 上传代码后自动构建；也可以在 Actions 页面点「Run workflow」手动触发
+# 推送即构建，也可在 Actions 页面点 Run workflow 手动触发
 on:
   push:
     branches: [main, master]
@@ -16,46 +16,60 @@ jobs:
       - name: 取代码
         uses: actions/checkout@v4
 
-      - name: 装系统依赖
+      - name: 钉住构建参数
+        run: |
+          # 不依赖仓库里 spec 的内容：构建时强制修正，避免版本漂移
+          sed -i 's|^requirements *=.*|requirements = python3==3.11.5,pygame==2.6.1|' buildozer.spec
+          sed -i '/^android.ndk *=/d; /^p4a.branch *=/d' buildozer.spec
+          sed -i '/^p4a.bootstrap *=/a android.ndk = 25b\np4a.branch = master' buildozer.spec
+          echo "--- 最终生效的关键行 ---"
+          grep -nE "^(requirements|android\.ndk|p4a\.branch|android\.api|android\.archs)" buildozer.spec
+
+      - name: 系统依赖
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            git zip unzip openjdk-17-jdk-headless \
-            autoconf automake libtool pkg-config \
-            zlib1g-dev libncurses-dev libtinfo6 \
-            cmake libffi-dev libssl-dev ccache
+          sudo apt-get install -y -qq git zip unzip openjdk-17-jdk-headless \
+            autoconf automake libtool pkg-config zlib1g-dev libncurses-dev \
+            libtinfo6 cmake libffi-dev libssl-dev ccache
+          echo "--- 环境 ---"
+          python3 --version
+          java -version 2>&1 | head -1
+          echo "--- 本次生效的 spec ---"
+          grep -E "^(requirements|android.ndk|android.api|p4a.branch)" buildozer.spec || true
 
       - name: 装 buildozer
         run: |
           python3 -m pip install --upgrade pip setuptools wheel
-          python3 -m pip install "cython==0.29.36" virtualenv buildozer
+          python3 -m pip install buildozer
           buildozer --version
 
-      - name: 缓存 SDK / NDK / python-for-android
+      - name: 缓存 SDK / NDK / p4a
         uses: actions/cache@v4
         with:
           path: |
             ~/.buildozer
             .buildozer
-          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          key: bz-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
           restore-keys: |
-            buildozer-${{ runner.os }}-
+            bz-${{ runner.os }}-
 
       - name: 构建 APK
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          yes | buildozer -v android debug
+          yes | buildozer -v android debug 2>&1 | tail -300
+          echo "--- 产物 ---"
+          ls -l bin/ 2>/dev/null || true
+          test -n "$(ls bin/*.apk 2>/dev/null)" || { echo "::error::没有产出 apk"; exit 1; }
 
-      - name: 构建日志（失败也能看）
-        if: always()
+      - name: 失败时打印关键报错
+        if: failure()
         run: |
-          if [ -d .buildozer ]; then
-            find .buildozer -name "build.log" -o -name "*.log" | head -20
-            for f in $(find .buildozer -name "build.log" | tail -1); do
-              echo "=== $f ==="
-              tail -400 "$f"
-            done
-          fi
+          for f in $(find .buildozer -name build.log 2>/dev/null); do
+            echo "===== $f ====="
+            grep -nE "error:|Error|ERROR|Traceback|fatal error" "$f" | tail -60 || true
+            echo "----- 日志末尾 -----"
+            tail -80 "$f"
+          done
 
       - name: 上传 APK
         if: success()
@@ -64,9 +78,3 @@ jobs:
           name: 中国象棋-apk
           path: bin/*.apk
           if-no-files-found: error
-
-      - name: 打 tag 时附到 Release（手机可直接点链接下载）
-        if: success() && startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: bin/*.apk
