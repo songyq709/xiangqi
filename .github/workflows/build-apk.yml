@@ -1,0 +1,72 @@
+name: 打包安卓 APK
+
+# 上传代码后自动构建；也可以在 Actions 页面点「Run workflow」手动触发
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    name: buildozer debug apk
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+
+    steps:
+      - name: 取代码
+        uses: actions/checkout@v4
+
+      - name: 装系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            git zip unzip openjdk-17-jdk-headless \
+            autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses-dev libtinfo6 \
+            cmake libffi-dev libssl-dev ccache
+
+      - name: 装 buildozer
+        run: |
+          python3 -m pip install --upgrade pip setuptools wheel
+          python3 -m pip install "cython==0.29.36" virtualenv buildozer
+          buildozer --version
+
+      - name: 缓存 SDK / NDK / python-for-android
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-
+
+      - name: 构建 APK
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          yes | buildozer -v android debug
+
+      - name: 构建日志（失败也能看）
+        if: always()
+        run: |
+          if [ -d .buildozer ]; then
+            find .buildozer -name "build.log" -o -name "*.log" | head -20
+            for f in $(find .buildozer -name "build.log" | tail -1); do
+              echo "=== $f ==="
+              tail -400 "$f"
+            done
+          fi
+
+      - name: 上传 APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 中国象棋-apk
+          path: bin/*.apk
+          if-no-files-found: error
+
+      - name: 打 tag 时附到 Release（手机可直接点链接下载）
+        if: success() && startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bin/*.apk
