@@ -18,10 +18,12 @@ jobs:
 
       - name: 钉住构建参数
         run: |
-          # python-for-android 的 v2024.01.21 里 hostpython3 与 python3 都是 3.11.5，
-          # 与 pygame 2.5.2 是能对上的一代；p4a 里的 pygame 配方本身是按 2.1.0 写的，
-          # pygame 2.6.1 太新（改了编译脚本），所以退到 2.5.2。
-          sed -i 's|^requirements *=.*|requirements = python3==3.11.5,pygame==2.5.2|' buildozer.spec
+          # 第 9 轮已确认：p4a 的 pygame 配方没有把 cython 列进依赖，
+          # pygame 的 setup.py 在 “Compiling Cython files” 这一步直接报
+          # “You need cython” 然后退出。所以把 cython 显式写进 requirements，
+          # 让 p4a 先把它装进 hostpython。pygame 2.5.x 的 .pyx 是按 Cython 3 写的，
+          # 而 p4a 自带的 cython 配方是 0.29.36，这里钉 3.0.11。
+          sed -i 's|^requirements *=.*|requirements = python3==3.11.5,pygame==2.5.2,cython==3.0.11|' buildozer.spec
           sed -i '/^android.ndk *=/d; /^p4a.branch *=/d; /^p4a.source_dir *=/d; /^android.api *=/d' buildozer.spec
           sed -i '/^p4a.bootstrap *=/a android.ndk = 25b\np4a.branch = 2024.01.21\nandroid.api = 33\np4a.source_dir = '"$GITHUB_WORKSPACE"'/p4a-src' buildozer.spec
           echo "--- 最终生效的关键行 ---"
