@@ -16,7 +16,10 @@ source.exclude_dirs = bin,__pycache__,.github
 version = 2.3
 
 # pygame 走 python-for-android 的 sdl2 引导层
-requirements = python3,pygame
+# 必须钉版本：p4a 的 pygame recipe 默认拉 pygame 2.1.0，它 include 的
+# longintrepr.h 在 Python 3.11 之后已移入 Include/cpython/，在 3.14 里更是没了。
+# 不钉 python 版本，构建环境会用最新 3.14，pygame 的 C 扩展必然编译失败。
+requirements = python3==3.11.5,pygame==2.6.1
 p4a.bootstrap = sdl2
 
 icon.filename = %(source.dir)s/icon.png
