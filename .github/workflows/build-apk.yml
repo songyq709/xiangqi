@@ -18,58 +18,57 @@ jobs:
 
       - name: 钉住构建参数
         run: |
-          # 不依赖仓库里 spec 的内容：构建时强制修正，避免版本漂移
+          # 关键：python-for-android 的 tag 2024.01.21 里 hostpython3 与 python3 都是 3.11.5，
+          # 与 pygame 2.6.1 是能对上的一代。
+          # master 分支已升到 Python 3.14.2，会把 python3 顶成 3.14，于是报
+          # "python3 should have same version as hostpython3, 3.14.2"。
           sed -i 's|^requirements *=.*|requirements = python3==3.11.5,pygame==2.6.1|' buildozer.spec
-          sed -i '/^android.ndk *=/d; /^p4a.branch *=/d' buildozer.spec
-          sed -i '/^p4a.bootstrap *=/a android.ndk = 25b\np4a.branch = master' buildozer.spec
+          sed -i '/^android.ndk *=/d; /^p4a.branch *=/d; /^android.api *=/d' buildozer.spec
+          sed -i '/^p4a.bootstrap *=/a android.ndk = 25b\np4a.branch = 2024.01.21\nandroid.api = 33' buildozer.spec
           echo "--- 最终生效的关键行 ---"
           grep -nE "^(requirements|android\.ndk|p4a\.branch|android\.api|android\.archs)" buildozer.spec
+
+      - name: 装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
       - name: 系统依赖
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq git zip unzip openjdk-17-jdk-headless \
-            autoconf automake libtool pkg-config zlib1g-dev libncurses-dev \
-            libtinfo6 cmake libffi-dev libssl-dev ccache
-          echo "--- 环境 ---"
+          sudo apt-get install -y -qq git zip unzip autoconf automake libtool \
+            pkg-config zlib1g-dev libncurses-dev libtinfo6 cmake libffi-dev \
+            libssl-dev ccache
           python3 --version
           java -version 2>&1 | head -1
-          echo "--- 本次生效的 spec ---"
-          grep -E "^(requirements|android.ndk|android.api|p4a.branch)" buildozer.spec || true
 
       - name: 装 buildozer
         run: |
-          python3 -m pip install --upgrade pip setuptools wheel
-          python3 -m pip install buildozer
+          python3 -m pip install --upgrade pip
+          python3 -m pip install "setuptools==68.2.2" "wheel==0.41.2" \
+            "cython==0.29.36" "buildozer==1.5.0"
           buildozer --version
-
-      - name: 缓存 SDK / NDK / p4a
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.buildozer
-            .buildozer
-          key: bz-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
-          restore-keys: |
-            bz-${{ runner.os }}-
 
       - name: 构建 APK
         run: |
           export PATH="$HOME/.local/bin:$PATH"
-          yes | buildozer -v android debug 2>&1 | tail -300
+          set +e
+          yes | buildozer -v android debug > build_out.log 2>&1
+          code=$?
+          echo "buildozer 退出码 $code"
           echo "--- 产物 ---"
           ls -l bin/ 2>/dev/null || true
-          test -n "$(ls bin/*.apk 2>/dev/null)" || { echo "::error::没有产出 apk"; exit 1; }
-
-      - name: 失败时打印关键报错
-        if: failure()
-        run: |
-          for f in $(find .buildozer -name build.log 2>/dev/null); do
-            echo "===== $f ====="
-            grep -nE "error:|Error|ERROR|Traceback|fatal error" "$f" | tail -60 || true
-            echo "----- 日志末尾 -----"
-            tail -80 "$f"
-          done
+          if [ -z "$(ls bin/*.apk 2>/dev/null)" ]; then
+            echo "::error::没有产出 apk"
+            echo "===== 关键报错 ====="
+            grep -nE "ERROR|error:|Error|Traceback|fatal error|Build failed|No such file" build_out.log | tail -60 || true
+            echo "===== 日志末尾 120 行 ====="
+            tail -120 build_out.log
+            exit 1
+          fi
+          echo "===== 日志末尾 40 行 ====="
+          tail -40 build_out.log
 
       - name: 上传 APK
         if: success()
