@@ -59,6 +59,22 @@ jobs:
             "cython==0.29.36" "buildozer==1.5.0"
           buildozer --version
 
+      # 第 14 轮：三次尝试全卡在 toolchain 阶段的下载上，报 HTTP 504 Gateway Time-out。
+      # 之前每轮都要重新下 Android SDK / NDK / 各 recipe 的源码包，dl.google.com
+      # 一旦抽风整轮就白等。这里把「纯依赖」缓存起来：SDK、NDK、packages（下载的
+      # 源码 tar）。代码本身不进缓存——dist/build 里含打包进去的 app 代码，
+      # 缓存它会导致装上新包却跑旧代码。
+      - name: 缓存 Android SDK / NDK / 依赖包
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer/android/platform/android-sdk
+            ~/.buildozer/android/platform/android-ndk-r25b
+            ~/.buildozer/android/platform/build-arm64-v8a/packages
+          key: xq-deps-r25b-py3115-pygame252-v1
+          restore-keys: |
+            xq-deps-r25b-py3115-pygame252-
+
       # buildozer 内部用 `git clone -b 2024.01.21 --single-branch` 取 p4a，
       # 这个写法在 GitHub 上取不到（第 6、7 次构建都在这里失败），
       # 所以改成自己按 refs/tags 精确取，再用 spec 里的 p4a.source_dir 直接指向它，
@@ -126,12 +142,12 @@ jobs:
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           set +e
-          # 第 12 轮：一次构建要联网取 SDK / NDK / pip 包，任何一次连接被重置
-          # （Errno 104 / 110）都会让整轮白等。buildozer 是幂等的，
-          # 已装好的组件第二次会跳过，所以失败就重跑，最多三次。
-          for i in 1 2 3; do
+          # 第 14 轮：一次构建要联网取 SDK / NDK / pip 包，任何一次连接被重置
+          # （Errno 104 / 110）或网关 504 都会让整轮白等。buildozer 是幂等的，
+          # 已装好的组件第二次会跳过，所以失败就重跑，最多五次，每次多等一会儿。
+          for i in 1 2 3 4 5; do
             echo "===== buildozer 第 $i 次尝试 ====="
-            yes | buildozer -v android debug > build_out_$i.log 2>&1
+            yes 2>/dev/null | buildozer -v android debug > build_out_$i.log 2>&1
             code=$?
             if [ -n "$(ls bin/*.apk 2>/dev/null)" ]; then
               echo "第 $i 次尝试成功（退出码 $code）"
@@ -139,12 +155,14 @@ jobs:
             fi
             echo "::warning::第 $i 次尝试失败，退出码 $code，日志 $(wc -l < build_out_$i.log) 行"
             grep -nE "ConnectionResetError|Errno 104|Errno 110|ReadTimeout|Temporary failure|Failed to establish|HTTP Error" build_out_$i.log | tail -5
+            echo "----- 卡在哪个下载 -----"
+            grep -nE "Downloading|Download failed|urlopen|from https?://" build_out_$i.log | tail -8
             tail -12 build_out_$i.log
-            sleep 20
+            sleep 45
           done
           cat build_out_*.log > build_out.log 2>/dev/null
           if [ -z "$(ls bin/*.apk 2>/dev/null)" ]; then
-            echo "::error::三次尝试都没有产出 apk，日志 $(wc -l < build_out.log) 行"
+            echo "::error::五次尝试都没有产出 apk，日志 $(wc -l < build_out.log) 行"
             echo "===== A. 最后在编哪个配方 ====="
             grep -nE "Building recipe|Installing .* into|Recipe .* is already" build_out.log | tail -8
             echo "===== B. 报错行（取最后 30 条）====="
