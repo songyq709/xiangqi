@@ -83,6 +83,37 @@ jobs:
             "sh>=1.10,<2.0" "build" "toml" "packaging"
           python3 -c "import pythonforandroid; print('p4a 可导入:', pythonforandroid.__file__)"
 
+      # 第 11 轮的根因：pygame 自带的 buildconfig/Setup.Android.SDL2.in 里，
+      # surface 模块只写了 surface.c / alphablit.c / surface_fill.c，
+      # 漏了 src_c/simd_blitters_sse2.c（桌面模板里有）。
+      # 于是 surface.so 引用 alphablit_alpha_sse2_argb_surf_alpha 却没人定义它，
+      # 安卓 bionic 链接器直接报 cannot locate symbol，pygame.display 导入失败，
+      # 表现为点图标一闪就退。这里在 p4a 生成 Setup 之后把这两行补回去。
+      - name: 修补 p4a 的 pygame 配方（补 SIMD 源文件）
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE/p4a-src"
+          python3 - <<'PY'
+          import io, re
+          p = 'pythonforandroid/recipes/pygame/__init__.py'
+          s = io.open(p, encoding='utf-8').read()
+          if 'simd_blitters_sse2' in s:
+              print('配方已含 simd_blitters_sse2，跳过')
+              raise SystemExit(0)
+          m = re.search(r'(?m)^([ \t]+)open\("Setup", "w"\)\.write\(setup_file\)', s)
+          if not m:
+              raise SystemExit('没找到写入 Setup 的那一行，配方结构变了，需人工确认')
+          ind = m.group(1)
+          add = (f'{ind}setup_file = setup_file.replace(\n'
+                 f'{ind}    "surface src_c/surface.c",\n'
+                 f'{ind}    "surface src_c/simd_blitters_sse2.c '
+                 f'src_c/simd_blitters_avx2.c src_c/surface.c")\n')
+          s = s[:m.start()] + add + s[m.start():]
+          io.open(p, 'w', encoding='utf-8').write(s)
+          print('已给 pygame 配方的 Setup 补上 SIMD 源文件')
+          PY
+          grep -n "simd_blitters_sse2" pythonforandroid/recipes/pygame/__init__.py
+
       - name: 构建 APK
         run: |
           export PATH="$HOME/.local/bin:$PATH"
@@ -101,6 +132,21 @@ jobs:
           fi
           echo "===== 成功，日志末尾 30 行 ====="
           tail -30 build_out.log
+          echo "===== 核对 surface.so 是否还缺 SIMD 符号 ====="
+          SO=$(find .buildozer -type f -path "*pygame/surface.so" | head -1)
+          READELF=$(find "$HOME/.buildozer" -type f -name llvm-readelf | head -1)
+          echo "surface.so = ${SO:-未找到}"
+          echo "llvm-readelf = ${READELF:-未找到}"
+          if [ -n "$SO" ] && [ -n "$READELF" ]; then
+            if "$READELF" --dyn-syms -W "$SO" | grep -qE "UND +(alphablit|blit_blend)"; then
+              "$READELF" --dyn-syms -W "$SO" | grep -E "UND +(alphablit|blit_blend)" | head -5
+              echo "::error::surface.so 仍缺 SIMD 实现，装上去还会闪退"
+              exit 1
+            fi
+            echo "符号核对通过：alphablit / blit_blend 均已定义"
+          else
+            echo "跳过符号核对（未找到 so 或 readelf），不影响出包"
+          fi
 
       - name: 失败时把完整日志存成文件
         if: failure()
