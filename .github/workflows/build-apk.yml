@@ -183,6 +183,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: 中国象棋-apk
+          name: 中国象棋-apk-r${{ github.run_number }}
           path: bin/*.apk
           if-no-files-found: error

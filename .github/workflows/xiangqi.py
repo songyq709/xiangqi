@@ -510,7 +510,7 @@ def load_font(size):
 
 
 # ---------------------------- 版本 / 创作者 / 设置项 ----------------------------
-VERSION = "2.8"
+VERSION = "2.9"
 APP_NAME = "中国象棋-智算单机版"
 CREATOR = "songyq"     # 主页右下角标注；
 TIME_OPTIONS = [5, 10, 20, 30, 60]    # 对战时间（分钟）
@@ -2852,6 +2852,18 @@ def side_pieces_text(board, side):
     return "".join(parts) or "只剩光将"
 
 
+def both_side_phrase(board, ai_side):
+    """两边各剩什么：「我只剩一车一士，你也一样」/「我只剩一车一兵，你只剩一车一士」。
+    两边完全相同时不重复念一遍，读着不啰嗦，子力也照样对得上。"""
+    def say(t):
+        return t if t.startswith("只剩") else "只剩" + t
+    mine = say(side_pieces_text(board, ai_side))
+    foe = say(side_pieces_text(board, RED if ai_side == BLACK else BLACK))
+    if mine == foe:
+        return "我%s，你也一样" % mine
+    return "我%s，你%s" % (mine, foe)
+
+
 def cpu_hopeless(board, ai_side=None):
     """电脑是不是已经没救：只剩老将（最多再带两枚士象），对方手里有实打实的进攻子力。
     满足就返回一句说明（弹窗里要用），还有救返回 None。抽成模块级函数方便单测。
@@ -2877,8 +2889,8 @@ def cpu_hopeless(board, ai_side=None):
     counts = {}
     for pt in foe:
         counts[pt] = counts.get(pt, 0) + 1
-    return ("按规则，我只剩一枚光将、士象全无；你手上还有%s，"
-            "我挡不住这几子，认输。" % piece_phrase(counts))
+    return ("我只剩光将、士象全无，你手上还有%s，"
+            "真挡不住了。" % piece_phrase(counts))
 
 
 def cpu_draw_reason(board, moves, quiet, reps, last_declined=-99, ai_side=None,
@@ -2901,20 +2913,20 @@ def cpu_draw_reason(board, moves, quiet, reps, last_declined=-99, ai_side=None,
     if moves - int(last_declined) < gap:
         return None
     if insufficient_material(board):
-        return "按规则，双方都不剩能取胜的子力（只剩将帅士象或单马），判和。"
+        return ("这盘谁也杀不动了 —— %s，再走也是绕圈。和了吧？"
+                % both_side_phrase(board, ai_side))
     score = evaluate(board)
     mine = score if ai_side == RED else -score      # 电脑视角：正数电脑好
     total = len(board)
     if total <= 8 and abs(mine) <= 90:
         # 把两边剩的子写清楚，弹窗里的话与盘面一一对应
-        return ("盘上只剩 %d 枚子（我%s，你%s），子力相当、都攻不进对方九宫，"
-                "按规则判和。" % (total, side_pieces_text(board, ai_side),
-                                  side_pieces_text(board, RED if ai_side == BLACK else BLACK)))
+        return ("盘上就 %d 枚子了（%s），谁也啃不动谁。和了吧？"
+                % (total, both_side_phrase(board, ai_side)))
     if quiet >= 40 and abs(mine) <= 120:
-        return ("双方已经 %d 个回合没吃子，子力互相咬不动，"
-                "再走也是和棋。" % (quiet // 2))
+        return ("已经 %d 个回合没吃到你的子，你也一样，"
+                "再下就是耗时间。和了吧？" % (quiet // 2))
     if reps >= 2 and abs(mine) <= 90:
-        return "同一个局面已经走了三遍，谁也不肯变着，按规则判和。"
+        return "这局面咱俩来回走了三遍，谁也没新招。和了吧？"
     return None
 
 
@@ -2955,8 +2967,7 @@ def draw_draw_offer_overlay(screen, offer):
     lines = wrap_text(offer.get("reason") or "", body, p.w - 56)
     tail = ("接受就判你胜；想亲手吃将就点「继续下」，这局不结束，"
             "我不再提和、也不再认输。" if resign else
-            "同意就握手言和；不同意就接着下，我过几手若还觉得分不出"
-            "胜负才会再提，最多提三回。")
+            "同意就握手言和，不同意就接着下。")
     lines += wrap_text(tail, body, p.w - 56)
     y = p.y + 62
     for line in lines[:6]:
@@ -5472,8 +5483,8 @@ def draw_home(screen, bgm_name, hover=None):
                            box.centery - surf.get_height() // 2))
 
     # 右下角版本与创作者（宋体小字）——向左提一格，不贴右边框
-    ver = load_font_song(13).render(
-        "中国象棋·智算单机版 v%s　·　制作人：%s" % (VERSION, CREATOR), True, C((110, 86, 62)))
+    ver = load_font_song(16 if UI_BIG else 13).render(
+        "中国象棋·智算单机版 v%s　·　制作人：%s" % (VERSION, CREATOR), True, C((92, 68, 46)))
     screen.blit(ver, (SCREEN_W - 18 - HOME_CREDIT_DX - ver.get_width(), SCREEN_H - 46))
     # 左下角背景出处
     if bg:
@@ -7134,7 +7145,7 @@ def main():
         if hopeless:
             if len(S["history"]) >= int(S.get("resign_at", 10 ** 9)):
                 S["cpu_offer"] = {"kind": "resign", "who": ai_label(), "reason": (
-                    "上一回跟你求和没谈成，我又撑了几个回合，实在翻不了盘，只好认输。"
+                    "上一回跟你求和没谈成，我又撑了几个回合，实在没招了，认输。"
                     "你要想亲手把将吃掉，点「继续下」就行。")}
                 S["offer_elapsed"] = max(0.0, time.perf_counter() - S["turn_start"])
                 S["message"] = ("%s认输 —— 接受，或点「继续下」自己把将吃下来。"
@@ -7146,7 +7157,7 @@ def main():
                     >= DRAW_OFFER_GAP * (asked + 1)):
                 S["cpu_offer"] = {"kind": "draw", "who": ai_label(),
                                   "reason": hopeless + (
-                    "要不就此作和？不答应我再撑几个回合，撑不住就认输。")}
+                    "要不先和了？不答应我再撑几个回合，撑不住就认输。")}
                 S["offer_elapsed"] = max(0.0, time.perf_counter() - S["turn_start"])
                 S["message"] = ("%s提议和棋 —— 同意或继续下，看弹窗里的说明。"
                                 % ai_label())
@@ -7155,6 +7166,14 @@ def main():
         reason = offer_reason()
         if not reason:
             return
+        if not reason.endswith(("。", "？")):
+            reason += "。"
+        # 用户要的口气：不逼人，「不答应也行，过几步再来问」。第三次是最后一次，
+        # 就别许空诺，改成「我不再提了」，免得话说出去做不到。
+        if int(S.get("cpu_offer_times", 0)) < DRAW_OFFER_MAX - 1:
+            reason += "不答应也行，过几步我再提一回。"
+        else:
+            reason += "不答应就接着下，我不再提了。"
         S["cpu_offer"] = {"kind": "draw", "who": ai_label(), "reason": reason}
         S["offer_elapsed"] = max(0.0, time.perf_counter() - S["turn_start"])
         S["message"] = ("%s提议和棋 —— 同意或继续下，看弹窗里的说明。" % ai_label())
