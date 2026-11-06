@@ -14,7 +14,7 @@ jobs:
 
     steps:
       - name: 取代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # 第 15 轮：r18 出来的包仍叫 xiangqi-2.3-…，说明仓库里的 xiangqi.py 与
       # buildozer.spec 根本没被覆盖（网页上传同名文件后必须点 Commit changes）。
@@ -68,7 +68,7 @@ jobs:
           grep -nE "^(requirements|android\.ndk|p4a\.branch|p4a\.source_dir|android\.api|android\.ant_path|android\.archs)" buildozer.spec
 
       - name: 装 JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
@@ -100,7 +100,7 @@ jobs:
       # 源码 tar）。代码本身不进缓存——dist/build 里含打包进去的 app 代码，
       # 缓存它会导致装上新包却跑旧代码。
       - name: 缓存 Android SDK / NDK / 依赖包
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.buildozer/android/platform/android-sdk
@@ -226,7 +226,7 @@ jobs:
 
       - name: 失败时把完整日志存成文件
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: 构建日志
           path: build_out.log
@@ -248,7 +248,7 @@ jobs:
 
       - name: 上传 APK
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: 中国象棋-apk-r${{ github.run_number }}
           path: bin/*.apk
