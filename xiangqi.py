@@ -512,7 +512,7 @@ def load_font(size):
 
 
 # ---------------------------- 版本 / 创作者 / 设置项 ----------------------------
-VERSION = "2.12"
+VERSION = "2.13"
 APP_NAME = "中国象棋-智算单机版"
 CREATOR = "songyq"     # 主页右下角标注；
 TIME_OPTIONS = [5, 10, 20, 30, 60]    # 对战时间（分钟）
@@ -596,12 +596,27 @@ BGM_TRACKS = {
 BGM_CHANNEL = 1
 
 
+_NOTE_CACHE = {}
+
+
 def play_note(freq, dur, vol=0.16, channel=None):
-    """合成并播放一个单音（背景古曲用）；指定 channel 则占用独立声道"""
+    """合成并播放一个单音（背景古曲用）；指定 channel 则占用独立声道。
+
+    v2.13：按 (频率, 时长, 音量) 缓存波形。古曲来来回回就那几十个音，
+    原来每播一个音都要在 Python 里跑几万个采样点，手机上会把帧拖住。"""
     if freq <= 0 or dur <= 0:
         return
+    key = (freq, round(dur, 4), round(vol, 4))
+    buf = _NOTE_CACHE.get(key)
+    if buf is None:
+        try:
+            buf = _build_wave([(freq, dur, 4.5)], vol, 0.0)
+        except (pygame.error, OSError):
+            return
+        if len(_NOTE_CACHE) > 64:
+            _NOTE_CACHE.clear()
+        _NOTE_CACHE[key] = buf
     try:
-        buf = _build_wave([(freq, dur, 4.5)], vol, 0.0)
         snd = pygame.mixer.Sound(buffer=buf)
     except (pygame.error, OSError):
         return
@@ -2044,9 +2059,7 @@ def build_sounds():
         # 落子：木质感敲击。做三个音高，按落点高低挑一个 —— 上三路清脆、下三路低沉，
         # 听着像真在木盘上落子（外置 音效\move.wav 存在时三个变体都用文件里的声音）
         "move": pygame.mixer.Sound(buffer=_build_wave([(520, 0.07, 45)], 0.42, noise=0.55)),
-        "move_a": pygame.mixer.Sound(buffer=_build_wave([(566, 0.07, 45)], 0.40, noise=0.55)),
-        "move_b": pygame.mixer.Sound(buffer=_build_wave([(520, 0.07, 45)], 0.42, noise=0.55)),
-        "move_c": pygame.mixer.Sound(buffer=_build_wave([(472, 0.08, 45)], 0.44, noise=0.52)),
+        # v2.13：三个音高变体下面统一指向 move，启动时不必白合成三份波形
         # 吃子：更低更厚
         "capture": pygame.mixer.Sound(buffer=_build_wave([(260, 0.13, 26)], 0.58, noise=0.72)),
         # 将军：三声提示
@@ -6615,19 +6628,43 @@ def main():
         pass
 
     def present():
-        """把逻辑画布等比缩放贴到窗口正中并刷新（多余部分留黑边）"""
-        if (win_w, win_h) == (SCREEN_W, SCREEN_H):
-            display.blit(screen, (0, 0))
-        else:
-            if (draw_w, draw_h) != (win_w, win_h):
-                display.fill((0, 0, 0))          # 上下或左右的黑边
-            if (draw_w, draw_h) == (SCREEN_W, SCREEN_H):
-                display.blit(screen, (off_x, off_y))
+        """把逻辑画布等比缩放贴到窗口正中并刷新（多余部分留黑边）。
+
+        v2.13：安卓退出 / 切后台 / 旋屏时 SDL 会先缩掉或重建显示 Surface，
+        沿用启动时算好的固定矩形取子区域，一旦越界就抛
+        "subsurface rectangle outside surface area"，被 main.py 的红屏错误页接管。
+        这里每帧按显示 Surface 的真实尺寸重算放置，取子区域前先做边界检查，
+        越界或 Surface 失效时退回离屏缩放（blit 自动裁剪），任何情况都不抛异常。"""
+        nonlocal win_w, win_h, draw_w, draw_h, off_x, off_y
+        try:
+            surf = pygame.display.get_surface()
+            cur_w, cur_h = surf.get_size()
+        except (pygame.error, AttributeError):
+            return
+        if cur_w < 1 or cur_h < 1:
+            return                      # Surface 正被系统回收，跳过这一帧即可
+        if (cur_w, cur_h) != (win_w, win_h):
+            win_w, win_h = cur_w, cur_h
+            draw_w, draw_h, off_x, off_y = fit_layout(win_w, win_h)
+        dw, dh = max(1, draw_w), max(1, draw_h)
+        try:
+            if (dw, dh) != (cur_w, cur_h):
+                surf.fill((0, 0, 0))    # 上下或左右的黑边
+            if (dw, dh) == (SCREEN_W, SCREEN_H):
+                surf.blit(screen, (off_x, off_y))
             else:
-                target = display.subsurface(
-                    pygame.Rect(off_x, off_y, draw_w, draw_h))
-                pygame.transform.smoothscale(screen, (draw_w, draw_h), target)
-        pygame.display.flip()
+                rect = pygame.Rect(off_x, off_y, dw, dh)
+                if (rect.left >= 0 and rect.top >= 0 and
+                        rect.right <= cur_w and rect.bottom <= cur_h):
+                    target = surf.subsurface(rect)
+                    pygame.transform.smoothscale(screen, (dw, dh), target)
+                else:
+                    # Surface 尺寸刚变过：离屏缩放后 blit，超出的部分自动裁剪
+                    surf.blit(pygame.transform.smoothscale(screen, (dw, dh)),
+                              (off_x, off_y))
+            pygame.display.flip()
+        except (pygame.error, ValueError):
+            pass
 
     def to_logical(pos):
         return window_to_logical(pos, win_w, win_h)
@@ -7958,6 +7995,13 @@ def main():
         boot.finish()          # （v2.11 起 boot 恒为 None，保留此分支给旧调用兜底）
     # 残局库丢后台读：主循环第一帧就能画出主页，字号扫描 / 棋盘预渲染也不必等它
     start_library_load()
+    # v2.13：启动这段时间里敲屏幕攒下的事件一律丢掉。否则主循环第一帧会一次
+    # 收到几十个 MOUSEBUTTONDOWN，既误触菜单，又把 sync_library 的等待压到主线程，
+    # 系统判定无响应就直接杀掉进程（表现就是「连敲几下就闪退」）。
+    try:
+        pygame.event.clear()
+    except pygame.error:
+        pass
 
     def sync_library():
         """用主循环里唯一的等待点：真的还没读完时，一主线程 join，最多闪一下。"""
@@ -8024,8 +8068,19 @@ def main():
         # ---- 事件 ----
         # ---- 事件（窗口缩放时把鼠标坐标换算回逻辑画布坐标） ----
         events = pygame.event.get()
+        if IS_ANDROID and library_loading():
+            # 后台还在整理残局库：这期间只放行退出与窗口事件，其余连点全吞掉，
+            # 既不误触菜单，也不会让主线程 join 后台线程造成无响应。
+            _wev = getattr(pygame, "WINDOWEVENT", None)
+            _keep = {pygame.QUIT}
+            if _wev is not None:
+                _keep.add(_wev)
+            _back = getattr(pygame, "K_AC_BACK", -999)
+            events = [ev for ev in events
+                      if ev.type in _keep
+                      or (ev.type == pygame.KEYDOWN and ev.key == _back)]
         if events and not S.get("lib_ready"):
-            sync_library()          # 主人开始操作时才等后台读完（通常早已读完，立即返回）
+            sync_library()          # 此时后台通常已读完，立即返回，不阻塞
         if (win_w, win_h) != (SCREEN_W, SCREEN_H):
             for ev in events:
                 if "pos" in ev.dict:
@@ -8837,6 +8892,8 @@ def main():
                     if not S["over"]:
                         maybe_cpu_offer()     # 电脑觉得和定了就主动开口
 
+        if not running:
+            break                       # v2.13：退出已发出，别再画最后一帧
         # ---- 渲染 ----
         # 提和弹窗开着时冻结本手计时：用户在看说明、做决定，不该扣他的时间
         if S["cpu_offer"]:

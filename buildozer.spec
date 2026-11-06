@@ -13,7 +13,7 @@ source.include_exts = py,png,jpg,jpeg,json,ttf,otf,wav,ogg,mp3
 source.exclude_patterns = icon_src.png,启动日志.txt,*.pyc
 source.exclude_dirs = bin,__pycache__,.github
 
-version = 2.12
+version = 2.13
 
 # pygame 走 python-for-android 的 sdl2 引导层
 # 必须钉版本：p4a 的 pygame recipe 默认拉 pygame 2.1.0，它 include 的
@@ -25,7 +25,10 @@ p4a.bootstrap = sdl2
 p4a.branch = 2024.01.21
 
 icon.filename = %(source.dir)s/icon.png
-presplash.filename = %(source.dir)s/icon.png
+# v2.13：启动闪屏换成纯色图。原来指向 icon.png，SDL 层在 Python 加载前
+# 会先把那张「象」字图标铺出来，看上去像又播了一次开机画面。
+# presplash.png 是与主页同色的纯米色大图，启动瞬间只有底色，主页首帧直接接上。
+presplash.filename = %(source.dir)s/presplash.png
 
 # 竖屏、吃满全屏（游戏内部逻辑画布 572×838，会等比缩放居中留黑边）
 orientation = portrait
@@ -40,7 +43,7 @@ android.ndk_api = 21
 # 钉 NDK 版本：不写这一行，buildozer 会挑最新 NDK，与 p4a 的 recipe 不匹配
 android.ndk = 25b
 android.archs = arm64-v8a
-android.numeric_version = 21200
+android.numeric_version = 21300
 android.accept_sdk_license = True
 android.allow_backup = True
 

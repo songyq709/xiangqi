@@ -154,8 +154,9 @@ def main():
                 screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
             except pygame.error:
                 screen = pygame.display.set_mode((0, 0))
-            _paint(screen, (120, 0, 0), "启动失败：%s" % stage, tb)
-            _wait(120, stop_on_touch=True)
+            _paint(screen, (120, 0, 0), "启动失败：%s" % stage,
+                   "点一下屏幕返回。\n" + tb)
+            _wait(20, stop_on_touch=True)
         except Exception:
             _log("错误屏也没能显示：\n" + traceback.format_exc())
         raise
