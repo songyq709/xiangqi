@@ -16,6 +16,41 @@ jobs:
       - name: 取代码
         uses: actions/checkout@v4
 
+      # 第 15 轮：r18 出来的包仍叫 xiangqi-2.3-…，说明仓库里的 xiangqi.py 与
+      # buildozer.spec 根本没被覆盖（网页上传同名文件后必须点 Commit changes）。
+      # 在这一步就拦下来，几秒钟看出「传错了」，不用白等一小时。
+      - name: 核对仓库里的程序版本
+        run: |
+          set -e
+          V=$(grep -m1 '^VERSION = ' xiangqi.py | sed -E 's/.*"(.*)".*/\1/')
+          S=$(grep -m1 '^version = ' buildozer.spec | sed -E 's/.*= *//')
+          N=$(grep -m1 '^android.numeric_version' buildozer.spec | sed -E 's/.*= *//')
+          echo "xiangqi.py 里的 VERSION = ${V:-未找到}"
+          echo "buildozer.spec 的 version = ${S:-未找到} / numeric = ${N:-未找到}"
+          {
+            echo "### 本次构建版本"
+            echo ""
+            echo "| 项目 | 值 |"
+            echo "| --- | --- |"
+            echo "| xiangqi.py VERSION | ${V:-未找到} |"
+            echo "| buildozer.spec version | ${S:-未找到} |"
+            echo "| numeric_version | ${N:-未找到} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$V" ] || [ -z "$S" ]; then
+            echo "::error::没读到版本号，确认仓库根目录有 xiangqi.py 与 buildozer.spec"
+            exit 1
+          fi
+          if [ "$V" != "$S" ]; then
+            echo "::error::两个文件版本不一致：xiangqi.py=$V，spec=$S，请两个一起覆盖上传"
+            exit 1
+          fi
+          LOW=$(printf '%s\n2.9\n' "$V" | sort -V | head -1)
+          if [ "$LOW" != "2.9" ]; then
+            echo "::error::仓库里还是旧版 $V（要 2.9）。网页上传同名文件后必须点 Commit changes 才生效。"
+            exit 1
+          fi
+          echo "版本核对通过：$V"
+
       - name: 钉住构建参数
         run: |
           # 第 9 轮已确认：p4a 的 pygame 配方没有把 cython 列进依赖，
@@ -196,6 +231,20 @@ jobs:
           name: 构建日志
           path: build_out.log
           if-no-files-found: ignore
+
+      # 出包后再核一次：APK 名字里必须带本次版本号。名字不对说明 spec 没生效，
+      # 与其让人装上一版旧包，不如在这里失败。
+      - name: 核对产物版本
+        if: success()
+        run: |
+          set -e
+          V=$(grep -m1 '^VERSION = ' xiangqi.py | sed -E 's/.*"(.*)".*/\1/')
+          ls -l bin/ || true
+          if ! ls bin/*.apk 2>/dev/null | grep -q -- "-$V-"; then
+            echo "::error::APK 名字里没有 -$V-，spec 的 version 没生效"
+            exit 1
+          fi
+          echo "产物核对通过：$(ls bin/*.apk | head -1)"
 
       - name: 上传 APK
         if: success()

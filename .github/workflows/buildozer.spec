@@ -13,7 +13,7 @@ source.include_exts = py,png,jpg,jpeg,json,ttf,otf,wav,ogg,mp3
 source.exclude_patterns = icon_src.png,启动日志.txt,*.pyc
 source.exclude_dirs = bin,__pycache__,.github
 
-version = 2.9
+version = 2.10
 
 # pygame 走 python-for-android 的 sdl2 引导层
 # 必须钉版本：p4a 的 pygame recipe 默认拉 pygame 2.1.0，它 include 的
@@ -40,7 +40,7 @@ android.ndk_api = 21
 # 钉 NDK 版本：不写这一行，buildozer 会挑最新 NDK，与 p4a 的 recipe 不匹配
 android.ndk = 25b
 android.archs = arm64-v8a
-android.numeric_version = 20900
+android.numeric_version = 21000
 android.accept_sdk_license = True
 android.allow_backup = True
 

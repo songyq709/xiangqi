@@ -510,7 +510,7 @@ def load_font(size):
 
 
 # ---------------------------- 版本 / 创作者 / 设置项 ----------------------------
-VERSION = "2.9"
+VERSION = "2.10"
 APP_NAME = "中国象棋-智算单机版"
 CREATOR = "songyq"     # 主页右下角标注；
 TIME_OPTIONS = [5, 10, 20, 30, 60]    # 对战时间（分钟）
@@ -5693,6 +5693,14 @@ HELP_LH = 21
 
 HELP_PARAS = [
     "欢迎使用《中国象棋·智算单机版 v%s》—— 计时对弈与残局研究。" % VERSION,
+    "【两个版本】同一份程序，规则、AI、残局库、按钮文案完全一致，只在「怎么操作」上各让一步。"
+    "安卓版：竖屏全屏、手指点选；底栏排成两排——上排 悔棋/提示/复盘/存局/返回主菜单，"
+    "下排 认输/提和/棋谱/重开，格子比桌面版大一号，拇指够得着；冷启动有一段开机动画，"
+    "棋子在转，等的时候不干等；设置、残局库、曲子都存在应用私有目录，不占相册、不用存储权限；"
+    "设置里能直接导入曲子、删曲子，不用连电脑。"
+    "桌面版：窗口可缩放，鼠标右键摆棋删子；导入曲子走系统文件对话框，能一次挑好几个文件；"
+    "键盘 Esc 关浮层、回车确认；存档、棋谱、曲目录都在 exe 旁边，拷走就能搬去另一台机器。"
+    "一句话：手机上胜在随手就能下，桌面上胜在摆棋、整理谱子方便。",
     "【对战】红方先行：点棋子再点落点，绿点可走、红圈可吃；电脑执黑，每方限时包干。"
     "轮到哪方走，他的将/帅旁边就亮起一只单步计时圆表：十二个刻度像座钟，指针一圈"
     "走完这一手的限时，圈心写这手还剩几秒，旁边一句「该你走」/「思考中…」；"
@@ -5702,11 +5710,11 @@ HELP_PARAS = [
     "不受罚）；双方都不将军则判和。走子前会先拦住重复，留出换着法的余地；"
     "电脑也会另择路线，不主动长将。",
     "【和棋】除了规则判和，程序会自己开口提和：盘上只剩 8 枚子以内、或连续 40 个"
-    "半回合没吃子、或同一局面反复出现，而它也没占到便宜时，会弹窗按象棋规则简单说清"
-    "理由（盘上还剩什么子、多少回合没吃子，都和棋面一一对应）。"
+    "半回合没吃子、或同一局面反复出现，而它也没占到便宜时，会弹窗把盘面说清楚"
+    "（我剩什么子、你剩什么子、多少回合没吃子），话很直白，不讲条文。"
     "点「同意和棋」就握手言和、这一局到此结束；点「继续下」接着走，"
-    "它下次再提的间隔一次比一次长（约 6 / 12 / 18 个回合），一局最多提三回，"
-    "拒满三回就不再打扰。弹窗开着时计时暂停，慢慢看、慢慢决定；"
+    "过了几手它可能再提一次（间隔一次比一次长，约 6 / 12 / 18 个回合），一局最多提三回，"
+    "第三回被拒就不再提。弹窗开着时计时暂停，慢慢看、慢慢决定；"
     "您也可以点「提和」主动找它和，它觉得自己没占到明显便宜就会答应。",
     "【认输】它只剩光杆老将、您手上还有车能破防时，先低头求和："
     "答应就和棋；不答应它就再撑 3 个回合，然后弹「认输」。认输弹窗里点"
@@ -6017,6 +6025,137 @@ def finish_app():
                 pass
 
 
+class BootSplash:
+    """手机冷启动的开机动画：一枚棋子当表盘，外圈金点绕着转，下面一条进度条
+    跟着加载步骤往前走。桌面不显示——窗口一闪就开，动画反而挡事。
+
+    只在主线程画：初始化里最重的 ensure_library 丢给后台线程，主线程一直 tick，
+    「棋子在转」和「残局库在读」是同时发生的，不会卡成一张静止图。
+    """
+
+    MIN_SECONDS = 1.4          # 至少转一圈，别一闪而过
+    FADE_SECONDS = 0.25
+
+    def __init__(self, screen, present):
+        self.screen = screen
+        self.present = present
+        self.t0 = time.perf_counter()
+        self.msg = "正在载入棋局"
+        self.progress = 0.08
+        self.frames = 0
+        self._font_pair = None
+        self._font_dead = False
+
+    def _fonts(self):
+        """中文字体第一次画才去找；找不到就退回几何纹样，绝不让启动画面自己崩"""
+        if self._font_dead:
+            return None
+        if self._font_pair is None:
+            try:
+                self._font_pair = (load_font_song(92), load_font_song(17))
+            except Exception:
+                self._font_dead = True
+                return None
+        return self._font_pair
+
+    def _paint(self, t):
+        scr = self.screen
+        scr.fill(C((24, 32, 28)))
+        cx, cy = SCREEN_W // 2, 396
+        for r in (196, 158):
+            pygame.draw.circle(scr, C((36, 46, 40)), (cx, cy), r, 1)
+
+        # 外圈：24 颗点，连续 6 颗点亮，随时间绕着走
+        ticks = 24
+        head = int(t * 26) % ticks
+        for i in range(ticks):
+            ang = i * 2 * math.pi / ticks - math.pi / 2
+            px = cx + int(math.cos(ang) * 168)
+            py = cy + int(math.sin(ang) * 168)
+            lit = (i - head) % ticks < 6
+            pygame.draw.circle(scr, C((216, 172, 86)) if lit else C((56, 68, 58)),
+                               (px, py), 4 if lit else 3)
+
+        # 棋子圆盘 + 双圈
+        pygame.draw.circle(scr, C((240, 228, 200)), (cx, cy), 116)
+        pygame.draw.circle(scr, C((124, 86, 50)), (cx, cy), 116, 3)
+        pygame.draw.circle(scr, C((178, 142, 94)), (cx, cy), 99, 2)
+
+        pair = None if self.frames < 1 else self._fonts()
+        if pair:
+            big, small = pair
+            word = big.render("象", True, C((112, 66, 36)))
+            scr.blit(word, (cx - word.get_width() // 2,
+                            cy - word.get_height() // 2 - 6))
+            tip = small.render(self.msg, True, C((198, 180, 148)))
+            scr.blit(tip, (cx - tip.get_width() // 2, cy + 148))
+            ver = small.render("中国象棋·智算单机版 v%s　安卓版" % VERSION,
+                               True, C((122, 110, 90)))
+            scr.blit(ver, (cx - ver.get_width() // 2, SCREEN_H - 56))
+        else:
+            # 字体还没热起来的第一帧：画个内纹，别让画面空着
+            pygame.draw.line(scr, C((178, 142, 94)), (cx - 44, cy), (cx + 44, cy), 2)
+            pygame.draw.line(scr, C((178, 142, 94)), (cx, cy - 44), (cx, cy + 44), 2)
+
+        bar = pygame.Rect(cx - 130, cy + 196, 260, 6)
+        draw_rect(scr, C((46, 58, 50)), bar, 0, 3)
+        if self.progress > 0:
+            fill = pygame.Rect(bar.x, bar.y,
+                               max(6, int(bar.w * self.progress)), bar.h)
+            draw_rect(scr, C((216, 172, 86)), fill, 0, 3)
+
+    def tick(self, msg=None, progress=None):
+        if msg:
+            self.msg = msg
+        if progress is not None:
+            self.progress = max(0.02, min(1.0, progress))
+        for _ev in pygame.event.get():      # 加载期间的事件一律吞掉，别攒进主循环
+            pass
+        self._paint(time.perf_counter() - self.t0)
+        self.frames += 1
+        self.present()
+        pygame.time.wait(12)
+
+    def finish(self):
+        """收尾：补够最短时长，再淡出，不硬切"""
+        while time.perf_counter() - self.t0 < self.MIN_SECONDS:
+            self.tick(progress=max(self.progress, 0.92))
+        self.tick(progress=1.0)
+        begin = time.perf_counter()
+        while time.perf_counter() - begin < self.FADE_SECONDS:
+            k = (time.perf_counter() - begin) / self.FADE_SECONDS
+            self._paint(time.perf_counter() - self.t0)
+            veil = pygame.Surface((SCREEN_W, SCREEN_H))
+            veil.fill((0, 0, 0))
+            veil.set_alpha(int(255 * min(1.0, k)))
+            self.screen.blit(veil, (0, 0))
+            self.present()
+            pygame.time.wait(12)
+
+
+def bg_prepare(fn, splash=None, msg=None):
+    """把耗时的准备活丢到后台线程，主线程继续转动画，结束再把结果 / 异常交回来。
+    异常原样抛回主线程，不在后台悄悄吞掉。"""
+    box = {}
+
+    def work():
+        try:
+            box["value"] = fn()
+        except BaseException as exc:
+            box["error"] = exc
+
+    th = threading.Thread(target=work, name="xq-boot", daemon=True)
+    th.start()
+    while th.is_alive():
+        if splash is not None:
+            splash.tick(msg)
+        else:
+            time.sleep(0.02)
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+
 def main():
     # 触屏：让 SDL 把手指事件同时映射成鼠标事件，整套点选逻辑不用改
     os.environ.setdefault("SDL_TOUCH_MOUSE_EVENTS", "1")
@@ -6099,8 +6238,15 @@ def main():
     def to_logical(pos):
         return window_to_logical(pos, win_w, win_h)
 
+    # v2.9：手机冷启动要等好几秒，先上一段开机动画。桌面不显示。
+    boot = BootSplash(screen, present) if IS_ANDROID else None
+    if boot:
+        boot.tick("正在载入设置", 0.10)
+
     settings0 = load_settings()
     apply_theme(settings0.get("theme", THEME_NAMES[0]))
+    if boot:
+        boot.tick("正在准备棋盘", 0.22)
     # 背景音乐：旧存档里 "bgm": "关" 视为关闭，曲目回落到第一首
     pool = bgm_names()
     bgm0 = settings0.get("bgm", pool[0])
@@ -6134,7 +6280,8 @@ def main():
                      "除将帅外至少还要一枚棋子，士象车马炮最多 2、兵卒最多 5；"
                      "落点亦须合法——将帅士不出九宫、象不过河、兵卒不后退。"),
         "position": "残局示例",
-        "entries": ensure_library(),
+        "entries": (bg_prepare(ensure_library, boot, "正在整理残局库")
+                    if boot else ensure_library()),
         "lib_open": False,
         "lib_category": "全部",
         "lib_pieces": "全部",     # 阶段筛选档位（全部 / 开局 / 中局 / 残局）
@@ -6197,6 +6344,8 @@ def main():
         "rename_idx": None,
         "rename_turn": RED,
     }
+    if boot:
+        boot.tick("马上就好", 0.90)
 
     # v2.4：暂存半局功能已撤掉，旧设置里攒下的条目不再读入（见 persist_settings 里清键）
 
@@ -7414,6 +7563,8 @@ def main():
         S["selected"] = None
         beep("select")
 
+    if boot:
+        boot.finish()          # 补够最短时长 + 淡出，然后进主页
     fps = pygame.time.Clock()
     running = True
     frame_no = 0
