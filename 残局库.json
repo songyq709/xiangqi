@@ -11275,9 +11275,11 @@
     ],
     "done": true,
     "done_side": "r",
-    "done_at": "2026-11-02 14:30:21",
+    "done_at": "2026-11-03 23:06:52",
     "turn": "r",
-    "fav": false
+    "fav": false,
+    "done_moves": 51,
+    "done_secs": 111
   },
   {
     "name": "千里独行",
@@ -12073,7 +12075,12 @@
         "type": "r"
       }
     ],
-    "turn": "r"
+    "turn": "r",
+    "done": true,
+    "done_side": "r",
+    "done_at": "2026-11-05 19:26:27",
+    "done_moves": 29,
+    "done_secs": 249
   },
   {
     "name": "残局 1102-165226",
@@ -12299,6 +12306,4719 @@
         "c": 3,
         "color": "b",
         "type": "r"
+      }
+    ],
+    "turn": "r"
+  },
+  {
+    "name": "将",
+    "saved": "2026-11-03 23:02:47",
+    "saved_at": "2026-11-03 23:02:47",
+    "category": "自定残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 1,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 1,
+        "c": 2,
+        "color": "b",
+        "type": "c"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "done": true,
+    "done_side": "r",
+    "done_at": "2026-11-05 19:21:36",
+    "done_moves": 3,
+    "done_secs": 15
+  },
+  {
+    "name": "第101局 单车问路",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 3,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 9,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第102局 车兵巧胜",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 0,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 3,
+        "c": 4,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 6,
+        "c": 7,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第103局 马踏连营",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 3,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 4,
+        "c": 2,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 8,
+        "c": 1,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 8,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第104局 炮镇中宫",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 2,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 5,
+        "c": 8,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第105局 兵临城下",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 0,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 1,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 3,
+        "c": 4,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 3,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第106局 车马临门",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 5,
+        "c": 7,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 8,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第107局 马炮争先",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 3,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 1,
+        "c": 6,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 8,
+        "c": 2,
+        "color": "r",
+        "type": "c"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第108局 车炮夹攻",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 4,
+        "c": 5,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第109局 一车十子",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 5,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 5,
+        "c": 4,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第110局 马跃檀溪",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 2,
+        "c": 1,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 4,
+        "c": 2,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 6,
+        "c": 6,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 8,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第111局 炮打中军",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 0,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 5,
+        "c": 3,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第112局 兵贵神速",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 2,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 2,
+        "c": 0,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 4,
+        "c": 3,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 5,
+        "c": 2,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第113局 车水马龙",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 3,
+        "c": 3,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 7,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 8,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第114局 马不停蹄",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 3,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 6,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第115局 双炮镇山",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 6,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第116局 单骑救主",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 1,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 0,
+        "c": 4,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 4,
+        "c": 4,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 6,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第117局 轻车简从",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 4,
+        "c": 1,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 4,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第118局 老卒成仁",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 4,
+        "c": 6,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 5,
+        "c": 4,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 8,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第119局 车马冷着",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 4,
+        "c": 7,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 8,
+        "c": 2,
+        "color": "r",
+        "type": "h"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第120局 炮火连天",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 6,
+        "c": 2,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 7,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 1,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第121局 兵行诡道",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 2,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 7,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 6,
+        "c": 1,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 6,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第122局 马到成功",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第123局 残局夺魁",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 3,
+        "c": 1,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 6,
+        "c": 7,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第124局 步步紧逼",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 4,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 7,
+        "c": 0,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第125局 声东击西",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 7,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 4,
+        "c": 3,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第126局 引蛇出洞",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 6,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 8,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第127局 关门捉贼",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 8,
+        "c": 1,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 6,
+        "color": "r",
+        "type": "c"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第128局 调虎离山",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 5,
+        "c": 4,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 6,
+        "c": 2,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第129局 以逸待劳",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 4,
+        "c": 2,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 5,
+        "c": 0,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 5,
+        "c": 4,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 6,
+        "c": 1,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第130局 顺手牵羊",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 8,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 7,
+        "color": "r",
+        "type": "h"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第131局 投石问路",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 2,
+        "c": 8,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 6,
+        "c": 1,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 8,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 1,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第132局 金蝉脱壳",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 7,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 7,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第133局 釜底抽薪",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 5,
+        "c": 6,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第134局 擒王先擒",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 6,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第135局 海底捞月",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 3,
+        "c": 7,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 4,
+        "c": 3,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 7,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第136局 雪中送炭",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 3,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 5,
+        "c": 5,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 5,
+        "c": 7,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第137局 四面楚歌",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 3,
+        "c": 0,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 7,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 7,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第138局 背水一战",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 6,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 3,
+        "c": 7,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 6,
+        "c": 0,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 8,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第139局 破釜沉舟",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 2,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 1,
+        "c": 0,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 1,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 5,
+        "c": 3,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 8,
+        "c": 6,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第140局 一鼓作气",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 7,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 2,
+        "c": 8,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 3,
+        "c": 3,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 5,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第141局 单车问路",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 1,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 5,
+        "c": 1,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第142局 车兵巧胜",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 6,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 6,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 5,
+        "c": 7,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第143局 马踏连营",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 5,
+        "c": 8,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第144局 炮镇中宫",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 3,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 6,
+        "c": 3,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第145局 兵临城下",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 0,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 4,
+        "c": 6,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 6,
+        "c": 3,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 8,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第146局 车马临门",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 4,
+        "c": 5,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 6,
+        "c": 3,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 8,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第147局 马炮争先",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 6,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 3,
+        "c": 8,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第148局 车炮夹攻",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 0,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 6,
+        "c": 7,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第149局 一车十子",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 5,
+        "c": 7,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 6,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 8,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第150局 马跃檀溪",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 4,
+        "c": 0,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 6,
+        "c": 1,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第151局 炮打中军",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 2,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 8,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 5,
+        "c": 3,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 7,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 8,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第152局 兵贵神速",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 4,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 1,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 5,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第153局 车水马龙",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 4,
+        "c": 7,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第154局 马不停蹄",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 0,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 2,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 7,
+        "c": 7,
+        "color": "r",
+        "type": "h"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第155局 双炮镇山",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 7,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 7,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第156局 单骑救主",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 1,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 5,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第157局 轻车简从",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 0,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 1,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 3,
+        "c": 3,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 6,
+        "c": 2,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 7,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第158局 老卒成仁",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 7,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 4,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 8,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第159局 车马冷着",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 8,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 8,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 3,
+        "c": 8,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 4,
+        "c": 1,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第160局 炮火连天",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 4,
+        "c": 4,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第161局 兵行诡道",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 0,
+        "c": 7,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 1,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 5,
+        "c": 3,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 8,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第162局 马到成功",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 8,
+        "c": 1,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 8,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 8,
+        "color": "r",
+        "type": "h"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第163局 残局夺魁",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 1,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 3,
+        "c": 2,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 8,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第164局 步步紧逼",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 4,
+        "c": 8,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 5,
+        "c": 0,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第165局 声东击西",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 4,
+        "c": 8,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 8,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 8,
+        "color": "r",
+        "type": "c"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第166局 引蛇出洞",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 8,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 5,
+        "c": 0,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 7,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第167局 关门捉贼",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 7,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 8,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 1,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第168局 调虎离山",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 2,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第169局 以逸待劳",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 3,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "第170局 顺手牵羊",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "经典残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 1,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 2,
+        "c": 0,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "车马争锋",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 1,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 4,
+        "c": 1,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 4,
+        "c": 4,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 0,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "炮镇边关",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 5,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 3,
+        "c": 2,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 6,
+        "c": 8,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 8,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "马踏中营",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 4,
+        "c": 1,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 5,
+        "c": 1,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 5,
+        "c": 8,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 7,
+        "c": 0,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 8,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "兵困九宫",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 1,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 4,
+        "c": 3,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 4,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 5,
+        "c": 4,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "双车错",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 1,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 4,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 7,
+        "c": 6,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 8,
+        "c": 7,
+        "color": "r",
+        "type": "c"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "马后炮",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 2,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 1,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 3,
+        "c": 8,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 4,
+        "c": 8,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "重炮破士",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 5,
+        "c": 5,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 6,
+        "c": 5,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 7,
+        "c": 6,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 8,
+        "c": 7,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "卧槽惊魂",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 1,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 5,
+        "c": 2,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 6,
+        "c": 2,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 9,
+        "c": 1,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "铁门栓",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 2,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 3,
+        "c": 5,
+        "color": "b",
+        "type": "h"
+      },
+      {
+        "r": 3,
+        "c": 6,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 8,
+        "c": 3,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "大雨滂沱",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 3,
+        "c": 3,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 5,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 8,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 8,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "c"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "小征东",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 3,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 6,
+        "c": 0,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 6,
+        "c": 7,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 8,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "隔断巫山",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 4,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 6,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 5,
+        "c": 0,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 5,
+        "c": 6,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 2,
+        "color": "b",
+        "type": "h"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "炮打两狼关",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 6,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 4,
+        "c": 4,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 5,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 6,
+        "c": 4,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "独钓寒江",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 1,
+        "c": 8,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 6,
+        "c": 5,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 6,
+        "c": 6,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "雪拥蓝关",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 8,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 5,
+        "c": 3,
+        "color": "b",
+        "type": "c"
+      },
+      {
+        "r": 6,
+        "c": 3,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 6,
+        "c": 5,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 8,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "雁阵惊寒",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 3,
+        "c": 0,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 4,
+        "c": 2,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 7,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 5,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "月下追风",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 0,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 4,
+        "c": 8,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 8,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 8,
+        "c": 8,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 9,
+        "c": 7,
+        "color": "r",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "单刀赴会",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 6,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 0,
+        "c": 7,
+        "color": "b",
+        "type": "c"
+      },
+      {
+        "r": 1,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 5,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 4,
+        "c": 0,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "千里走单骑",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 2,
+        "c": 0,
+        "color": "b",
+        "type": "h"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 7,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 2,
+        "color": "b",
+        "type": "e"
+      },
+      {
+        "r": 5,
+        "c": 5,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 8,
+        "c": 5,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 8,
+        "color": "r",
+        "type": "c"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "回马金枪",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 4,
+        "c": 1,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 5,
+        "c": 2,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 5,
+        "c": 7,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 8,
+        "c": 7,
+        "color": "r",
+        "type": "h"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "三战吕布",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 3,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 4,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 6,
+        "c": 6,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 8,
+        "c": 2,
+        "color": "r",
+        "type": "h"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "六出祁山",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 2,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 3,
+        "c": 8,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 4,
+        "c": 5,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 8,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 7,
+        "color": "b",
+        "type": "r"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "七擒七纵",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 6,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 4,
+        "c": 0,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 5,
+        "c": 7,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 5,
+        "c": 8,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "空城计",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 3,
+        "c": 2,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 5,
+        "c": 1,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 7,
+        "c": 8,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 8,
+        "c": 1,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "草船借箭",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 2,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 3,
+        "c": 3,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 4,
+        "c": 0,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 5,
+        "c": 0,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 6,
+        "c": 6,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "连环计",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 2,
+        "c": 3,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 0,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 3,
+        "c": 6,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 6,
+        "c": 8,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 7,
+        "c": 3,
+        "color": "r",
+        "type": "k"
+      },
+      {
+        "r": 9,
+        "c": 7,
+        "color": "r",
+        "type": "c"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "苦肉计",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 0,
+        "c": 6,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 2,
+        "c": 7,
+        "color": "b",
+        "type": "c"
+      },
+      {
+        "r": 3,
+        "c": 0,
+        "color": "r",
+        "type": "c"
+      },
+      {
+        "r": 5,
+        "c": 5,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "反间计",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 4,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 6,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 3,
+        "c": 4,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 3,
+        "c": 7,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 4,
+        "c": 0,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 7,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "走为上",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 2,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 4,
+        "c": 2,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 5,
+        "c": 2,
+        "color": "r",
+        "type": "p"
+      },
+      {
+        "r": 7,
+        "c": 5,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 8,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "瞒天过海",
+    "saved": "本机新增（v2.4 题库）",
+    "source": "generated/v2.4-extra",
+    "category": "江湖排局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 5,
+        "color": "b",
+        "type": "a"
+      },
+      {
+        "r": 1,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 3,
+        "c": 8,
+        "color": "b",
+        "type": "r"
+      },
+      {
+        "r": 4,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 6,
+        "c": 6,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 7,
+        "c": 5,
+        "color": "b",
+        "type": "p"
+      },
+      {
+        "r": 8,
+        "c": 4,
+        "color": "r",
+        "type": "k"
+      }
+    ],
+    "turn": "r",
+    "fav": false
+  },
+  {
+    "name": "残局 1105-205729",
+    "saved": "2026-11-05 20:57:29",
+    "saved_at": "2026-11-05 20:57:29",
+    "category": "自定残局",
+    "pieces": [
+      {
+        "r": 0,
+        "c": 3,
+        "color": "b",
+        "type": "k"
+      },
+      {
+        "r": 1,
+        "c": 2,
+        "color": "r",
+        "type": "r"
+      },
+      {
+        "r": 2,
+        "c": 5,
+        "color": "r",
+        "type": "h"
+      },
+      {
+        "r": 4,
+        "c": 4,
+        "color": "b",
+        "type": "c"
+      },
+      {
+        "r": 9,
+        "c": 4,
+        "color": "r",
+        "type": "k"
       }
     ],
     "turn": "r"

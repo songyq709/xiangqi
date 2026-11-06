@@ -2,6 +2,22 @@
 # pyright: reportMissingImports=false
 """中国象棋 · 智算单机版（Pygame 版）
 
+v2.5 手机专版改动：
+  1) 界面按屏幕自动分两套：启动探针量一次真实分辨率，短边 ≥720 物理像素就走
+     「手机放大版」——顶栏按钮 32 高、底栏 36 高、主页按钮加高加大，字号提一档；
+     桌面窗口仍是原来的尺寸。判断结果也可以通过 XQ_BIG_UI=0/1 强制指定。
+  2) 底栏重排：音乐开关挪到顶栏、紧挨音效；底栏九格改为
+     悔棋 / 复盘 / 提示 / 存局 / 认输 / 提和 / 棋谱 / 重开 / 返回。
+     「返回」等同 Esc，摆棋与残局库本来就有自己的返回口，不再重复放。
+  3) 主页新增「退出」：手机上直接结束 Activity 回桌面，不必再用上滑手势；
+     桌面版点它等同关窗口。
+  4) 「提示」改为后台线程算：深度由 3 层提到最多 8 层、时间 2 秒，
+     算的时候界面照常 60 帧，不再假死；残局里给出的着法明显更靠谱。
+  5) 上滑切后台再回来偶发黑屏：加了 Surface 尺寸复核（每半秒一次 + 前台事件触发重建），
+     并关掉 SDL 的「失焦最小化」；同时把主线程里所有长任务都移出，避免 ANR 黑屏。
+  6) 残局库新增 100 局（经典 70 + 江湖 30），全部经过规则校验与「两步杀」强制验证；
+     升级安装时按名字自动并入老库，不用清数据。
+
 v2.4 改动：
   1) 对局中按 Esc 不再悄悄存「半局」，直接回主页，并提示「这局没存，想保下来
      请在局中点存局」。整个「暂存半局」功能撤掉，旧设置里攒下的暂存条目一并清空。
@@ -494,7 +510,7 @@ def load_font(size):
 
 
 # ---------------------------- 版本 / 创作者 / 设置项 ----------------------------
-VERSION = "2.3"
+VERSION = "2.10"
 APP_NAME = "中国象棋-智算单机版"
 CREATOR = "songyq"     # 主页右下角标注；
 TIME_OPTIONS = [5, 10, 20, 30, 60]    # 对战时间（分钟）
@@ -504,6 +520,7 @@ HOME_CREDIT_DX = 26                   # 主页落款「制作人」向左提一�
 BGM_CORE = ["高山流水", "平沙落雁", "渔舟唱晚", "广陵散"]
 BGM_NAMES = BGM_CORE          # 兼容旧引用；实际可用曲目请用 bgm_names()
 BGM_MAX = 8                   # 设置面板最多列 8 个曲目（2 行 × 4）
+MUSIC_MAX_FILES = 4           # 曲 目录里最多收 4 首自己导入的曲子
 LIB_CATEGORIES = ["全部", "经典残局", "江湖排局", "自定残局", "收藏"]
 CUSTOM_CATEGORY = "自定残局"      # 对战 / 摆棋里存下来的局面默认归到这里
 UNDO_LIMITS = [("不限", 0), ("三次", 3), ("五次", 5)]
@@ -1025,6 +1042,30 @@ def legal_moves(board, color):
 
 def is_checkmate(board, color):
     return in_check(board, color) and len(legal_moves(board, color)) == 0
+
+
+def insufficient_material(board):
+    """子力不足判和：双方都再也不可能把对方将死。
+
+    判定口径（跟着象棋惯例走，宁可放过、不可错杀）：
+      · 一方只要有车、炮、兵（卒），就还有进攻手段 —— 不算和；
+      · 马算半个：一匹马还能「马后炮」式的巧胜，两匹马才算真有攻势；
+      · 双方都只剩将帅 + 士象（或至多各一匹马）时，任何走法都分不出胜负。
+    典型的「光将对光将」「单马对光将」「单马对单马」「只剩将士象互磨」
+    都落在这里 —— 以前这些局面要磨到六十回合无吃子才判和，用户看着就是
+    「明明和定了却还在下」。"""
+    for color in (RED, BLACK):
+        horses = 0
+        for (pc, pt) in board.values():
+            if pc != color:
+                continue
+            if pt in (ROOK, CANNON, PAWN):
+                return False
+            if pt == HORSE:
+                horses += 1
+        if horses >= 2:
+            return False
+    return True
 
 
 def move_reason(board, fr, fc, tr, tc):
@@ -1903,11 +1944,29 @@ SFX_ALIASES = {
 _MUSIC_CACHE = {}
 
 
+def extern_files_dir():
+    """安卓的外部可写目录：/sdcard/Android/data/org.songyq.xiangqi/files。
+    放曲目、音效、背景图都行——数据线连电脑或者文件管理能直接拷进去，不用申请权限。
+    非安卓返回 None。"""
+    if not IS_ANDROID:
+        return None
+    ext = os.environ.get("EXTERNAL_STORAGE") or "/storage/emulated/0"
+    d = os.path.join(ext, "Android", "data", "org.songyq.xiangqi", "files")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        pass
+    return d if os.path.isdir(d) else None
+
+
 def _audio_bases():
-    """找 音效 / 曲 目录的位置：程序目录、解包目录，以及它们的上一级
+    """找 音效 / 曲 目录的位置：手机外部可写目录排在前面（自己拷进去的最优先），
+    然后是程序目录、解包目录，以及它们的上一级
     （exe 放在 dist 里时，把 曲 目录摆在 dist 上一层同样能被找到）"""
     bases = []
-    for base in (_BASE_DIR, _res_dir(), os.path.dirname(_BASE_DIR)):
+    cands = [extern_files_dir(), _BASE_DIR, _res_dir(),
+             os.path.dirname(_BASE_DIR)]
+    for base in cands:
         if base and base not in bases and os.path.isdir(base):
             bases.append(base)
     return bases
@@ -2330,52 +2389,66 @@ def fmt_time(seconds):
 
 
 def control_hitboxes():
-    """设置栏按钮区域，返回 [(Rect, (类型, 名称))]"""
+    """顶栏按钮区域，返回 [(Rect, (类型, 名称))]。
+    手机版把四档难度合成一个「难度·xx」按钮（点一下换一档），
+    换来的宽度给摆棋 / 残局 / 音效 / 音乐 / 单步，手指点得准。
+    音乐开关按用户要求从底栏挪到音效旁边，底栏因此少一格、每格更宽。"""
     boxes = []
+    if UI_BIG:
+        x, y, h = 8, 4, 32
+        for w, kind in ((112, "diff_cycle"), (68, "edit"), (68, "lib"),
+                        (74, "sound"), (74, "music"), (90, "move")):
+            boxes.append((pygame.Rect(x, y, w, h), (kind, None)))
+            x += w + 6
+        return boxes
     x = 48
     for label, _depth in DIFFICULTY_LEVELS:
-        boxes.append((pygame.Rect(x, 7, 50, 26), ("diff", label)))
-        x += 56
-    boxes.append((pygame.Rect(274, 7, 62, 26), ("edit", None)))
-    boxes.append((pygame.Rect(344, 7, 70, 26), ("lib", None)))
-    # 「存局」改到底部按钮栏（对战 / 残局 / 摆棋都能存），顶部不再重复放一个
-    boxes.append((pygame.Rect(424, 7, 74, 26), ("sound", None)))
+        boxes.append((pygame.Rect(x, 7, 44, 26), ("diff", label)))
+        x += 48
+    boxes.append((pygame.Rect(242, 7, 58, 26), ("edit", None)))
+    boxes.append((pygame.Rect(306, 7, 64, 26), ("lib", None)))
+    # 「存局」在底部按钮栏（对战 / 残局 / 摆棋都能存），顶部不再重复放一个
+    boxes.append((pygame.Rect(376, 7, 58, 26), ("sound", None)))
+    boxes.append((pygame.Rect(440, 7, 58, 26), ("music", None)))
     # 单步限时：对局中直接点就能在 不限 / 15 / 30 / 60 秒 之间轮换
-    boxes.append((pygame.Rect(502, 7, 64, 26), ("move", None)))
+    boxes.append((pygame.Rect(504, 7, 62, 26), ("move", None)))
     return boxes
 
 
-def draw_control_bar(screen, difficulty, sound_on, editing=False, move_limit=0):
+def draw_control_bar(screen, difficulty, sound_on, editing=False, move_limit=0,
+                     music_on=True):
     pygame.draw.rect(screen, TH["panel_bg"], pygame.Rect(0, 0, SCREEN_W, CONTROL_H))
     pygame.draw.line(screen, TH["panel_line"], (0, CONTROL_H - 1),
                      (SCREEN_W, CONTROL_H - 1), 1)
 
-    font = load_font(14)
-    hint = font.render("难度", True, C((112, 98, 80)))
-    screen.blit(hint, (10, (CONTROL_H - hint.get_height()) // 2))
+    font = load_font(15 if UI_BIG else 14)
+    if not UI_BIG:
+        hint = font.render("难度", True, C((112, 98, 80)))
+        screen.blit(hint, (10, (CONTROL_H - hint.get_height()) // 2))
 
     for rect, (kind, label) in control_hitboxes():
+        tone = C((34, 150, 96))
         if kind == "diff":
-            text = label
-            active = difficulty == label
+            text, active = label, difficulty == label
+        elif kind == "diff_cycle":
+            text, active = "难度·" + difficulty, True
         elif kind == "edit":
-            text = "摆棋中" if editing else "摆棋"
-            active = editing
+            text, active = ("摆棋中" if editing else "摆棋"), editing
         elif kind == "lib":
-            text = "残局库"
-            active = False
-        elif kind == "save":
-            text = "保存"
-            active = False
+            text, active = "残局", False
         elif kind == "move":
-            text = "单步" + ("不限" if int(move_limit) <= 0 else str(int(move_limit)))
+            text = "步限" + ("不限" if int(move_limit) <= 0 else str(int(move_limit)))
             active = int(move_limit) > 0
+        elif kind == "music":
+            text, active = ("音乐开" if music_on else "音乐关"), music_on
+            tone = C((52, 96, 150))
+        elif kind == "sound":
+            text, active = ("音效开" if sound_on else "音效关"), sound_on
         else:
-            text = "音效开" if sound_on else "音效关"
-            active = sound_on
+            text, active = "保存", False
         draw_button_face(screen, rect,
-                         C((34, 150, 96)) if active else C((250, 246, 238)),
-                         C((34, 150, 96)) if active else C((196, 186, 170)),
+                         tone if active else C((250, 246, 238)),
+                         tone if active else C((196, 186, 170)),
                          radius=8, active=active)
         surf = font.render(text, True, C((255, 255, 255)) if active else TH["btn_text"])
         screen.blit(surf, (rect.centerx - surf.get_width() // 2,
@@ -2493,7 +2566,8 @@ def draw_player_panel(screen, rect, label, remain, active, count, side, hint="",
     info_font = load_font(15)
     time_font = load_font(26)
 
-    name_y = rect.y + (10 if side == BLACK else 16)
+    name_y = rect.y + (10 if side == BLACK
+                       else max(6, (rect.height - name_font.get_height()) // 2))
     name = name_font.render(label, True, accent if active else TH["muted"])
     screen.blit(name, (rect.x + 14, name_y))
     info = info_font.render("第 %d 手" % count, True, TH["muted"])
@@ -2504,8 +2578,9 @@ def draw_player_panel(screen, rect, label, remain, active, count, side, hint="",
     if remain <= 30:
         color = C((208, 60, 50))
     txt = time_font.render(fmt_time(remain), True, color)
-    screen.blit(txt, (rect.right - 16 - txt.get_width(),
-                      rect.y + (8 if side == BLACK else 11)))
+    time_y = rect.y + (8 if side == BLACK
+                       else max(4, (rect.height - txt.get_height()) // 2))
+    screen.blit(txt, (rect.right - 16 - txt.get_width(), time_y))
 
     # 单步计时圆表：只有轮走的一方有表（不走的一方不画），紧挨着他的将/帅
     if not active:
@@ -2616,7 +2691,8 @@ def draw_scene(screen, board, selected, turn, remain, turn_start, counts,
 
     draw_move_hints(screen, [] if game_over else (hints or []), board)
     draw_move_track(screen, last_move)
-    draw_control_bar(screen, difficulty, sound_on, editing, move_limit)
+    draw_control_bar(screen, difficulty, sound_on, editing, move_limit,
+                     music_on=music_on)
 
     shown = {}
     for color in (RED, BLACK):
@@ -2640,13 +2716,18 @@ def draw_scene(screen, board, selected, turn, remain, turn_start, counts,
     draw_player_panel(screen, red_rect, side_mark(RED), shown[RED], live == RED,
                       counts[RED], RED, _hint(RED), elapsed, move_limit)
 
-    # 提示 / 复盘说明（按钮栏上方，最多两行）
+    # 提示 / 复盘说明（按钮栏上方）：手机版底部只剩一行的位置，截断显示；
+    # 桌面版仍是两行，长的出错说明看得全。
     font = load_font(15)
     text_width = SCREEN_W - 32
     caption_text = caption if caption is not None else message
-    for i, line in enumerate(wrap_text(caption_text, font, text_width)[:2]):
-        surf = font.render(line, True, TH["text"])
-        screen.blit(surf, (16, red_rect.bottom + 4 + i * 18))
+    if UI_BIG:
+        line = fit_text(caption_text, font, text_width, TH["text"])
+        screen.blit(line, (16, red_rect.bottom + 3))
+    else:
+        for i, line in enumerate(wrap_text(caption_text, font, text_width)[:2]):
+            surf = font.render(line, True, TH["text"])
+            screen.blit(surf, (16, red_rect.bottom + 4 + i * 18))
 
     if replay_info is not None:
         draw_replay_controls(screen, replay_info[0], replay_info[1], replay_info[2])
@@ -2718,6 +2799,200 @@ def draw_result_banner(screen, text):
                        rect.centery - surf.get_height() // 2))
 
 
+# ---------------------------- 主动议和 / 认输 ----------------------------
+# 电脑不再只是「等人类提和」，它自己觉得再下也分不出胜负时会主动开口。
+# 人类不同意就接着下，间隔一次比一次长（12 / 24 / 36 个半回合），
+# 问过 DRAW_OFFER_MAX 回就不再打扰 —— 用户反馈「议和后还多次议和」太磨人。
+DRAW_OFFER_GAP = 12          # 第一次被拒后再等 6 个回合（12 个半回合）才重提
+DRAW_OFFER_MIN_MOVES = 16    # 开局 8 个回合内不提和，免得一上来就敷衍
+DRAW_OFFER_MAX = 3           # 一局里最多主动议和 3 回，再多就不提了
+RESIGN_AFTER_DECLINE = 6     # 必败局里被拒和棋后，再撑 3 个回合（6 个半回合）才认输
+
+
+def ai_label():
+    """对手怎么称呼：手机版说「手机」（同一部手机里没装电脑），桌面版仍说「电脑」"""
+    return "手机" if IS_ANDROID else "电脑"
+
+
+_CN_DIGIT = "零一二三四五六七八九"
+
+
+def cn_piece_num(n):
+    """棋子的个数念法：1→一、2→两、3→三…（两辆车比二辆车顺口）"""
+    n = int(n)
+    if n == 2:
+        return "两"
+    return _CN_DIGIT[n] if 1 <= n <= 9 else str(n)
+
+
+def piece_phrase(counts):
+    """把 {车:1, 兵:2} 说成「一车两兵」，让弹窗里的话与盘面一字对应"""
+    num = cn_piece_num
+    parts = []
+    for pt, word in ((ROOK, "车"), (CANNON, "炮"), (HORSE, "马"), (PAWN, "兵")):
+        n = int(counts.get(pt, 0))
+        if n:
+            parts.append(num(n) + word)
+    return "".join(parts) or "无进攻子力"
+
+
+def side_pieces_text(board, side):
+    """某一方盘上还剩什么子，说成「一车一士一象」（只说车马炮兵士象）"""
+    counts = {}
+    for (pc, pt) in board.values():
+        if pc == side and pt != KING:
+            counts[pt] = counts.get(pt, 0) + 1
+    num = cn_piece_num
+    parts = []
+    for pt, word in ((ROOK, "车"), (CANNON, "炮"), (HORSE, "马"),
+                     (PAWN, "兵"), (ADVISOR, "士"), (ELEPHANT, "象")):
+        n = int(counts.get(pt, 0))
+        if n:
+            parts.append(num(n) + word)
+    return "".join(parts) or "只剩光将"
+
+
+def both_side_phrase(board, ai_side):
+    """两边各剩什么：「我只剩一车一士，你也一样」/「我只剩一车一兵，你只剩一车一士」。
+    两边完全相同时不重复念一遍，读着不啰嗦，子力也照样对得上。"""
+    def say(t):
+        return t if t.startswith("只剩") else "只剩" + t
+    mine = say(side_pieces_text(board, ai_side))
+    foe = say(side_pieces_text(board, RED if ai_side == BLACK else BLACK))
+    if mine == foe:
+        return "我%s，你也一样" % mine
+    return "我%s，你%s" % (mine, foe)
+
+
+def cpu_hopeless(board, ai_side=None):
+    """电脑是不是已经没救：只剩老将（最多再带两枚士象），对方手里有实打实的进攻子力。
+    满足就返回一句说明（弹窗里要用），还有救返回 None。抽成模块级函数方便单测。
+    用户嫌「红方只一将、我多子了还在磨」——这局已经没有悬念，该低头了。"""
+    ai_side = ai_side if ai_side in (RED, BLACK) else AI_SIDE
+    human = RED if ai_side == BLACK else BLACK
+    mine = [pt for (pc, pt) in board.values() if pc == ai_side]
+    if not mine:
+        return None                      # 连将都没有，局面本身就不正常，不掺和
+    if any(pt in (ROOK, CANNON, HORSE, PAWN) for pt in mine):
+        return None                      # 还有能过河的子，说不准能反扑
+    # 只剩光杆老将才认输：将带一两个士象时，单车也破不了士象全（那是和棋，
+    # 不是必败），这时候走普通提和的流程就行，别白送一局
+    if len(mine) > 1:
+        return None
+    foe = [pt for (pc, pt) in board.values()
+           if pc == human and pt in (ROOK, CANNON, HORSE, PAWN)]
+    if not foe:
+        return None
+    heavy = sum(1 for pt in foe if pt in (ROOK, CANNON))
+    if heavy < 1 and len(foe) < 2:       # 一个兵 / 一匹马想破士象还差得远
+        return None
+    counts = {}
+    for pt in foe:
+        counts[pt] = counts.get(pt, 0) + 1
+    return ("我只剩光将、士象全无，你手上还有%s，"
+            "真挡不住了。" % piece_phrase(counts))
+
+
+def cpu_draw_reason(board, moves, quiet, reps, last_declined=-99, ai_side=None,
+                    declined=0):
+    """电脑想提和的理由（不想提就返回 None）。抽出成模块级函数，方便单测。
+
+    只在三种「确实分不出胜负」的盘面开口：
+      · 子力枯竭：双方合计 8 枚以内，谁也不多一个车；
+      · 长久无进展：连续 40 个半回合没吃子，局面僵着；
+      · 局面打转：同一个局面已经走过两回，谁都换不出新招。
+    另外要求已经走过 8 个回合，且距上次被拒的间隔逐次拉长；
+    被拒 declined 次后就不再提 —— 用户说「议和后多次议和」，太磨人。
+    理由一律用第一人称（「我这边…」），读起来是程序自己在说话。"""
+    ai_side = ai_side if ai_side in (RED, BLACK) else AI_SIDE
+    if declined >= DRAW_OFFER_MAX:
+        return None                       # 问够了，这一局不再主动提和
+    if moves < DRAW_OFFER_MIN_MOVES:
+        return None
+    gap = DRAW_OFFER_GAP * (int(declined) + 1)      # 12 → 24 → 36 个半回合
+    if moves - int(last_declined) < gap:
+        return None
+    if insufficient_material(board):
+        return ("这盘谁也杀不动了 —— %s，再走也是绕圈。和了吧？"
+                % both_side_phrase(board, ai_side))
+    score = evaluate(board)
+    mine = score if ai_side == RED else -score      # 电脑视角：正数电脑好
+    total = len(board)
+    if total <= 8 and abs(mine) <= 90:
+        # 把两边剩的子写清楚，弹窗里的话与盘面一一对应
+        return ("盘上就 %d 枚子了（%s），谁也啃不动谁。和了吧？"
+                % (total, both_side_phrase(board, ai_side)))
+    if quiet >= 40 and abs(mine) <= 120:
+        return ("已经 %d 个回合没吃到你的子，你也一样，"
+                "再下就是耗时间。和了吧？" % (quiet // 2))
+    if reps >= 2 and abs(mine) <= 90:
+        return "这局面咱俩来回走了三遍，谁也没新招。和了吧？"
+    return None
+
+
+def draw_offer_panel():
+    """提议和棋的小弹窗：居中显示（模态，棋盘暂时不可点）"""
+    # 第一人称说明常常三四行，弹窗做高一点，免得正文压到按钮上
+    return pygame.Rect((SCREEN_W - 452) // 2, (SCREEN_H - 244) // 2, 452, 244)
+
+
+def draw_offer_rects():
+    """弹窗里两个按钮：同意和棋 / 继续下（返回 [(Rect, kind)]）"""
+    p = draw_offer_panel()
+    w, gap = 190, 16
+    y = p.bottom - 58
+    x = p.centerx - (w * 2 + gap) // 2
+    return [(pygame.Rect(x, y, w, 42), "accept"),
+            (pygame.Rect(x + w + gap, y, w, 42), "decline")]
+
+
+def draw_draw_offer_overlay(screen, offer):
+    """程序主动议和 / 认输的弹窗：说清为什么，两个大按钮好按"""
+    if not offer:
+        return
+    resign = offer.get("kind") == "resign"
+    who = ai_label() if offer.get("who") is None else offer.get("who")
+    p = draw_offer_panel()
+    shade = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+    shade.fill((0, 0, 0, 120))
+    screen.blit(shade, (0, 0))
+    draw_rect(screen, C((252, 249, 242)), p, 0, 14)
+    edge = C((168, 76, 58)) if resign else C((52, 96, 150))
+    draw_rect(screen, edge, p, 2, 14)
+    title_text = (who + "认输") if resign else (who + "提议和棋")
+    title = load_font_song(23).render(title_text, True, edge)
+    screen.blit(title, (p.centerx - title.get_width() // 2, p.y + 20))
+
+    body = load_font(14)
+    lines = wrap_text(offer.get("reason") or "", body, p.w - 56)
+    tail = ("接受就判你胜；想亲手吃将就点「继续下」，这局不结束，"
+            "我不再提和、也不再认输。" if resign else
+            "同意就握手言和，不同意就接着下。")
+    lines += wrap_text(tail, body, p.w - 56)
+    y = p.y + 62
+    for line in lines[:6]:
+        surf = body.render(line, True, C((70, 58, 46)))
+        screen.blit(surf, (p.x + 28, y))
+        y += 20
+
+    bfont = load_font(17)
+    for rect, kind in draw_offer_rects():
+        if kind == "accept":
+            fill, edge_c, fg = (C((178, 74, 58)), C((150, 58, 46)),
+                                K((255, 255, 255))) if resign else (
+                                   C((34, 150, 96)), C((26, 124, 78)), K((255, 255, 255)))
+        else:
+            fill, edge_c, fg = C((250, 246, 238)), C((196, 186, 170)), C((92, 82, 68))
+        draw_button_face(screen, rect, fill, edge_c, radius=10)
+        if resign:
+            label = "接受认输" if kind == "accept" else "继续下"
+        else:
+            label = "同意和棋" if kind == "accept" else "继续下"
+        surf = bfont.render(label, True, fg)
+        screen.blit(surf, (rect.centerx - surf.get_width() // 2,
+                           rect.centery - surf.get_height() // 2))
+
+
 def draw_move_track(screen, last_move):
     """绘制最近一步的走子轨迹：起止格半透明高亮 + 外环 + 方向箭头"""
     if not last_move:
@@ -2754,6 +3029,7 @@ def draw_move_track(screen, last_move):
 
 # ---------------------------- 残局库与摆棋模式 ----------------------------
 LIB_PATH = os.path.join(_BASE_DIR, "残局库.json")
+LIB_DELETED_PATH = os.path.join(_BASE_DIR, "残局库_已删.json")   # 用户删掉的局，防升级时被补回来
 SETTINGS_PATH = os.path.join(_BASE_DIR, "象棋设置.json")
 LIB_PAGE_SIZE = 20           # 残局库一屏可见 20 行（尾部同样按 20 行显示）
 LIB_ROW_H = 30               # 行高
@@ -2952,7 +3228,7 @@ def record_text(state, reason=""):
                  state["difficulty"], state.get("time_limit", TIME_LIMIT) // 60,
                  move_limit_label(state.get("move_limit", 0))),
              "生成时间：%s" % time.strftime("%Y-%m-%d %H:%M:%S"),
-             "红方：玩家    黑方：电脑%s" % ("（" + state["difficulty"] + "）"),
+             "红方：玩家    黑方：%s%s" % (ai_label(), "（" + state["difficulty"] + "）"),
              "", "初始局面："]
     counts = {}
     for (r, c), (pc, pt) in sorted(state["start_board"].items()):
@@ -3014,39 +3290,149 @@ def _seed_library():
             return
 
 
-def load_library():
-    """读取残局库（JSON 文件不存在或损坏时返回空列表）"""
-    _seed_library()
-    if not os.path.exists(LIB_PATH):
-        return []
+def _bundled_library():
+    """随程序发布的那份残局库（只读），用于版本升级时补进新局。"""
+    for base in (_res_dir(), _base_dir()):
+        src = os.path.join(base, "残局库.json")
+        if os.path.abspath(src) == os.path.abspath(LIB_PATH):
+            continue
+        try:
+            with open(src, "r", encoding="utf-8") as fp:
+                data = json.load(fp)
+        except (OSError, ValueError):
+            continue
+        if isinstance(data, list):
+            return [it for it in data
+                    if isinstance(it, dict) and isinstance(it.get("pieces"), list)]
+    return []
+
+
+def load_deleted_keys():
+    """读「已删名单」：用户删掉的局（名字 + 局面指纹）。
+    随程序带的那批局每次启动都会按名字并回来，不记一笔的话删了下次又冒出来。"""
+    empty = {"names": set(), "sigs": set()}
     try:
-        with open(LIB_PATH, "r", encoding="utf-8") as fp:
+        with open(LIB_DELETED_PATH, "r", encoding="utf-8") as fp:
             data = json.load(fp)
-    except (OSError, ValueError) as exc:
-        print("残局库读取失败：%s" % exc)
-        return []
-    if not isinstance(data, list):
-        return []
+    except (OSError, ValueError):
+        return empty
+    if not isinstance(data, dict):
+        return empty
+    return {"names": set(str(x) for x in (data.get("names") or [])),
+            "sigs": set(str(x) for x in (data.get("sigs") or []))}
+
+
+def remember_deleted(entry):
+    """把删掉的局记进名单，下次启动补新局时跳过它"""
+    keys = load_deleted_keys()
+    name = str(entry.get("name") or "")
+    if name:
+        keys["names"].add(name)
+    try:
+        sig = position_signature(entry)
+    except Exception:
+        sig = ""
+    if sig:
+        keys["sigs"].add(sig)
+    tmp = LIB_DELETED_PATH + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as fp:
+            json.dump({"names": sorted(keys["names"]), "sigs": sorted(keys["sigs"])},
+                      fp, ensure_ascii=False, indent=2)
+        os.replace(tmp, LIB_DELETED_PATH)
+    except OSError as exc:
+        print("已删名单写入失败：%s" % exc)
+
+
+def clear_deleted_keys():
+    """恢复备份 / 导库之后清空名单：刚恢复回来的局不该被挡住"""
+    try:
+        if os.path.exists(LIB_DELETED_PATH):
+            os.remove(LIB_DELETED_PATH)
+    except OSError:
+        pass
+
+
+def load_library():
+    """读取残局库（JSON 文件不存在或损坏时返回空列表）。
+    升级时把随程序新增的经典 / 江湖局按名字并进来——手机覆盖安装不会清数据目录，
+    老库里没有新局，只靠首次 seed 是补不进去的。用户改过的同名条目不动。"""
+    _seed_library()
     clean = []
-    for item in data:
-        if isinstance(item, dict) and isinstance(item.get("pieces"), list):
-            clean.append(item)
+    if os.path.exists(LIB_PATH):
+        try:
+            with open(LIB_PATH, "r", encoding="utf-8") as fp:
+                data = json.load(fp)
+        except (OSError, ValueError) as exc:
+            print("残局库读取失败：%s" % exc)
+            data = []
+        if isinstance(data, list):
+            clean = [item for item in data
+                     if isinstance(item, dict) and isinstance(item.get("pieces"), list)]
+    bundled = _bundled_library()
+    if bundled:
+        gone = load_deleted_keys()
+        have = {it.get("name") for it in clean}
+        added = [it for it in bundled
+                 if it.get("name") not in have
+                 and it.get("name") not in gone["names"]
+                 and position_signature(it) not in gone["sigs"]]
+        if added:
+            clean.extend(added)
+            try:
+                save_library(clean, backup=False)
+            except OSError:
+                pass
     return clean
 
 
 def backup_library():
-    """写库前留底：残局库.bak1 ~ .bak5 滚动保留 5 份"""
+    """写库前留底：残局库.bak1 ~ .bak3 滚动保留 3 份"""
     if not os.path.exists(LIB_PATH):
         return
     try:
-        for i in range(5, 1, -1):
+        for i in range(3, 1, -1):
             src = "%s.bak%d" % (LIB_PATH, i - 1)
             dst = "%s.bak%d" % (LIB_PATH, i)
             if os.path.exists(src):
                 shutil.copyfile(src, dst)
         shutil.copyfile(LIB_PATH, LIB_PATH + ".bak1")
+        # 老版本留过 5 份，多出来的 4 / 5 号顺手清掉，免得占地方又让人分不清
+        for i in range(4, 6):
+            old = "%s.bak%d" % (LIB_PATH, i)
+            if os.path.exists(old):
+                try:
+                    os.remove(old)
+                except OSError:
+                    pass
     except OSError as exc:
         print("残局库备份失败：%s" % exc)
+
+
+def restore_library_backup():
+    """从最近一份备份（.bak1）恢复整库。
+    恢复前先把当前库转存成 .bak1（旧的往后退一份），所以点错了还能再恢复回来。
+    返回 (条目列表 或 None, 提示语)。"""
+    src = LIB_PATH + ".bak1"
+    if not os.path.exists(src):
+        return None, "暂时没有备份可恢复（每次改库才会自动留底）。"
+    try:
+        with open(src, "r", encoding="utf-8") as fp:
+            data = json.load(fp)
+    except (OSError, ValueError) as exc:
+        return None, "备份读取失败：%s" % exc
+    if not isinstance(data, list):
+        return None, "备份文件不是残局库格式，没法恢复。"
+    clean = [it for it in data
+             if isinstance(it, dict) and isinstance(it.get("pieces"), list)]
+    if not clean:
+        return None, "备份里没有可用的残局。"
+    try:
+        backup_library()          # 当前库先退到 bak1，上面要恢复的数据已在内存里
+        save_library(clean, backup=False)
+    except OSError as exc:
+        return None, "恢复失败：%s" % exc
+    return clean, "已从备份恢复 %d 局（恢复前的库另存在 .bak1，可再恢复回去）。" % len(clean)
 
 
 def save_library(entries, backup=True):
@@ -3154,6 +3540,84 @@ def pick_text_file():
         return path or ""
     except Exception:
         return ""
+
+
+def pick_music_file():
+    """选一首音频文件（.mp3 / .ogg / .wav）；取消或无 tkinter 返回空串"""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        path = filedialog.askopenfilename(
+            title="导入曲子（最多 4 首）",
+            filetypes=[("音频文件", "*.mp3 *.ogg *.wav"),
+                       ("MP3", "*.mp3"), ("OGG", "*.ogg"), ("WAV", "*.wav"),
+                       ("所有文件", "*.*")])
+        root.destroy()
+        return path or ""
+    except Exception:
+        return ""
+
+
+def music_write_dir():
+    """导入曲子存哪儿：手机优先外部可写目录（卸载不丢），桌面用程序旁的 曲"""
+    ext = extern_files_dir()
+    base = ext if (IS_ANDROID and ext) else _BASE_DIR
+    d = os.path.join(base, MUSIC_DIR)
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        return None
+    return d if os.path.isdir(d) else None
+
+
+def import_music_file(src):
+    """把选中的一首曲子拷进 曲 目录，返回 (是否成功, 提示语)。
+    上限 MUSIC_MAX_FILES 首：设置页只有一行位置，多了排不下；名字过长也在这里截短。"""
+    if not src:
+        return False, "没有选文件，已取消导入。"
+    stem, ext = os.path.splitext(os.path.basename(src))
+    if ext.lower() not in AUDIO_EXTS:
+        return False, "只收 mp3 / ogg / wav 这三种音频，这个格式放不了。"
+    have = music_library()
+    if len(have) >= MUSIC_MAX_FILES:
+        return False, ("曲目录已经有 %d 首（上限 %d 首），先在文件管理里删掉一两首再导入。"
+                       % (len(have), MUSIC_MAX_FILES))
+    d = music_write_dir()
+    if not d:
+        return False, "找不到可写的曲目录，导入失败。"
+    stem = (stem or "曲子").strip()
+    if len(stem) > 12:                 # 名字太长在设置页只会剩省略号，这里先砍短
+        stem = stem[:12]
+    dst = os.path.join(d, stem + ext.lower())
+    if os.path.exists(dst):
+        return False, "「%s」已经在曲目录里了。" % stem
+    try:
+        shutil.copyfile(src, dst)
+    except OSError as exc:
+        return False, "导入失败：%s" % exc
+    _MUSIC_CACHE.pop(stem, None)
+    return True, "已导入「%s」，设置里的曲目就多一个（曲目录 %d/%d 首）。" % (
+        stem, len(music_library()), MUSIC_MAX_FILES)
+
+
+def delete_music_file(name):
+    """删掉 曲 目录里导入的某一首，返回 (是否成功, 提示语)。
+    内置古曲是程序合成的、盘上没有文件，删不掉——那几首留着当兜底。"""
+    path = find_audio(MUSIC_DIR, (name,))
+    if not path:
+        return False, "「%s」是程序内置的合成古曲，盘上没有文件，删不掉。" % name
+    if len(music_library()) <= 1:
+        return False, "曲目录里只剩这一首了，删掉就没音乐可放了。"
+    try:
+        os.remove(path)
+    except OSError as exc:
+        return False, "删除失败：%s" % exc
+    _MUSIC_CACHE.pop(name, None)
+    return True, "已删掉「%s」，曲目录还剩 %d/%d 首。可选别的曲目顶上。" % (
+        name, len(music_library()), MUSIC_MAX_FILES)
 
 
 def board_to_record(board):
@@ -3400,10 +3864,14 @@ def ensure_library():
             e["category"] = CUSTOM_CATEGORY    # 没有分类的旧条目按「自定残局」归类
             changed = True
     names = {e.get("name") for e in entries}
+    gone = load_deleted_keys()       # 用户删掉的江湖局也别再补回来
     for jp in JIANGHU_POSITIONS:
-        if jp["name"] not in names:
-            entries.append(dict(jp))
-            changed = True
+        if jp["name"] in names or jp["name"] in gone["names"]:
+            continue
+        if position_signature(jp) in gone["sigs"]:
+            continue
+        entries.append(dict(jp))
+        changed = True
     if changed:
         try:
             save_library(entries)
@@ -3529,17 +3997,32 @@ def library_panel(visible=LIB_PAGE_SIZE):
     return pygame.Rect(40, LIB_PANEL_TOP, SCREEN_W - 80, h)
 
 
-# 残局库的子数档位：按双方棋子总数分档，找「车兵残局」这类题更顺手
-LIB_PIECE_BANDS = ["全部", "≤4子", "5-8子", "≥9子"]
+# 残局库的「阶段」档位：按盘上双方棋子总数分 开局 / 中局 / 残局。
+# 原来这里是 ≤4子 / 5-8子 / ≥9子 的子数档，用着不直观；
+# 改成阶段后一眼能挑「我要练开局还是残局」。
+LIB_PIECE_BANDS = ["全部", "开局", "中局", "残局"]
+
+
+def entry_stage(entry):
+    """按盘上双方棋子总数判阶段：≥20 子算开局，11-19 子算中局，≤10 子算残局。
+    （219 局实测分布：开局 29、中局 76、残局 114，三档都有货）"""
+    n = len(entry.get("pieces") or [])
+    if n >= 20:
+        return "开局"
+    if n >= 11:
+        return "中局"
+    return "残局"
 
 
 def piece_band_ok(count, band):
-    if band == "≤4子":
-        return count <= 4
-    if band == "5-8子":
-        return 5 <= count <= 8
-    if band == "≥9子":
-        return count >= 9
+    """兼容旧调用：count 仍是子数，band 是阶段名"""
+    if band in ("开局", "中局", "残局"):
+        n = int(count)
+        if band == "开局":
+            return n >= 20
+        if band == "中局":
+            return 11 <= n <= 19
+        return n <= 10
     return True
 
 
@@ -3684,7 +4167,7 @@ def library_name_hit(name, index, query):
 
 
 def library_filter(entries, category="全部", query="", pieces="全部", level="全部"):
-    """按分类 + 搜索词 + 子数档位 + 难度档位筛出条目序号（供布局与计数共用）。
+    """按分类 + 搜索词 + 阶段档位 + 难度档位筛出条目序号（供布局与计数共用）。
     没有分类字段的老条目一律算作「自定残局」，避免存了却在分项里找不到。"""
     q = (query or "").strip().lower()
     out = []
@@ -3758,7 +4241,8 @@ def library_search_rect(panel):
 
 def library_io_rects(panel):
     return (pygame.Rect(panel.right - 240, panel.y + 8, 54, 22),    # 导出库
-            pygame.Rect(panel.right - 300, panel.y + 8, 54, 22))    # 导入库
+            pygame.Rect(panel.right - 300, panel.y + 8, 54, 22),    # 导入库
+            pygame.Rect(panel.right - 360, panel.y + 8, 54, 22))    # 恢复备份
 
 
 def library_star_rect(row):
@@ -3766,24 +4250,19 @@ def library_star_rect(row):
     return pygame.Rect(row.right - 36, row.y + 2, 32, row.h - 4)
 
 
-def library_rename_rect(row):
-    """行尾的改名按钮（改），点开命名浮层"""
-    return pygame.Rect(row.right - 68, row.y + 4, 26, row.h - 8)
-
-
-# 行内各列宽度（从左到右：行号 | 名称 | 状态 | 出处 | 存盘 | 改 ★）
+# 行内各列宽度（从左到右：编号 | 难度 | 名称 … 状态 | 存盘 | ★ ×）
+# 出处列与行尾「改」按钮按用户意见撤掉：来源不写了，改名也不要了。
+LIB_COL_NO_W = 28          # 编号区固定 28px 宽，三位数（100+）也压不到难度字
 LIB_COL_STAT_W = 46
 LIB_COL_TIME_W = 34
-LIB_COL_ORIGIN_W = 92
 LIB_COL_GAP = 8
 
 
 def library_row_columns(row):
-    """返回 (名称区右边界, 状态列x, 出处列x, 存盘列x)"""
+    """返回 (名称区右边界, 状态列x, 存盘列x)"""
     stat_x = row.right - 76 - LIB_COL_STAT_W
     time_x = stat_x - LIB_COL_GAP - LIB_COL_TIME_W
-    origin_x = time_x - LIB_COL_GAP - LIB_COL_ORIGIN_W
-    return origin_x - LIB_COL_GAP, stat_x, origin_x, time_x
+    return stat_x - LIB_COL_GAP, stat_x, time_x
 
 
 def library_delete_rect(row):
@@ -3791,7 +4270,7 @@ def library_delete_rect(row):
 
 
 def library_view(entries, category, query="", pieces="全部", level="全部"):
-    """返回当前分类 + 搜索词 + 子数 / 难度档位下的残局条目（全量，供计数使用）"""
+    """返回当前分类 + 搜索词 + 阶段 / 难度档位下的残局条目（全量，供计数使用）"""
     return [entries[i] for i in library_filter(entries, category, query, pieces, level)]
 
 
@@ -3805,8 +4284,7 @@ def library_page_rects(panel, total):
 
 
 def library_filter_rects(panel):
-    """底部的两个筛选按钮：子数档位 / 难度档位（与上翻下翻排在同一行，居中）
-    以前「子数」挤在分类行末尾，只剩 86px 还只能放一个；挪到底部后两个都放得下。"""
+    """底部的两个筛选按钮：阶段档位 / 难度档位（与上翻下翻排在同一行，居中）"""
     y = panel.bottom - 50
     w, gap = 104, 10
     x = panel.x + (panel.w - (w * 2 + gap)) // 2
@@ -3814,7 +4292,7 @@ def library_filter_rects(panel):
 
 
 def library_piece_rect(panel):
-    """「子数」筛选按钮：点一下换一档（全部 → ≤4子 → 5-8子 → ≥9子）"""
+    """「阶段」筛选按钮：点一下换一档（全部 → 开局 → 中局 → 残局）"""
     return library_filter_rects(panel)[0]
 
 
@@ -3838,35 +4316,83 @@ def player_panel_rect(side):
     # v1.5：面板加高到 50 / 54，靠棋盘那条边留出一条「轮走箭头带」
     if side == BLACK:
         return pygame.Rect(14, CONTROL_H + 4, SCREEN_W - 28, 50)
-    return pygame.Rect(14, BOARD_ORIGIN_Y + BOARD_PX_H + 2, SCREEN_W - 28, 58)
+    return pygame.Rect(14, BOARD_ORIGIN_Y + BOARD_PX_H + 2, SCREEN_W - 28,
+                       RED_PANEL_H)
 
 
 BOTTOM_Y = 832
-BOTTOM_H = 24
+BOTTOM_H = 26
+RED_PANEL_H = 58          # 红方（下方）计时面板高度：手机版压到 46 好腾出两排按钮
+BOTTOM_ROW1_Y = 832       # 手机版第一排按钮的 y（桌面版只有一排，沿用 BOTTOM_Y）
+BOTTOM_ROW_H = 26
+
+# 手机专属放大：启动时按真实屏幕尺寸判定（见 main 里的 set_ui_mode）。
+# 逻辑画布固定 572 宽，手机 1080 宽时整体放大 1.9 倍，按钮仍显小，
+# 所以手机版把顶栏、底栏、主页按钮都单独加高加宽，字号也提一档。
+UI_BIG = False
+
+
+def set_ui_mode(big):
+    """切换手机 / 桌面两套尺寸。只改底栏与下方面板的高度，不动棋盘坐标。"""
+    global UI_BIG, BOTTOM_Y, BOTTOM_H, RED_PANEL_H, BOTTOM_ROW1_Y, BOTTOM_ROW_H
+    UI_BIG = bool(big)
+    if UI_BIG:
+        # 手机：底部九格挤在一排时每格只有 56 逻辑像素（物理约 105），指头按不准，
+        # 改成两排 —— 上排常用五格（悔棋/提示/复盘/存局/返回），下排四格。
+        # 红方面板相应从 58 压到 46，让出来的高度给第二排按钮。
+        BOTTOM_Y, BOTTOM_H = 828, 36
+        RED_PANEL_H = 46
+        BOTTOM_ROW1_Y, BOTTOM_ROW_H = 796, 32
+    else:
+        BOTTOM_Y, BOTTOM_H = 832, 26
+        RED_PANEL_H = 58
+        BOTTOM_ROW1_Y, BOTTOM_ROW_H = 832, 26
 
 
 def bottom_button_rects():
-    """底部功能栏：悔棋/复盘/提示/存局/音乐/认输/提和/棋谱/重开（九格铺满）"""
+    """底部功能栏：悔棋/复盘/提示/存局/认输/提和/棋谱/重开/返回。
+    音乐开关与音效一起挪到顶栏，底栏腾出的宽度全给按钮。
+    手机版排成两排：上排 悔棋/提示/复盘/存局/返回，下排 认输/提和/棋谱/重开。
+    「返回」等同键盘 Esc / 手机返回键：回主页，不存半局。"""
+    if UI_BIG:
+        rows = (("undo", "hint", "replay", "save", "home"),
+                ("surrender", "draw", "export", "restart"))
+        out, gap = [], 8
+        for ri, keys in enumerate(rows):
+            y = BOTTOM_ROW1_Y + ri * (BOTTOM_ROW_H + 4)
+            n = len(keys)
+            w = (SCREEN_W - 16 - gap * (n - 1)) // n
+            for i, key in enumerate(keys):
+                out.append((pygame.Rect(8 + i * (w + gap), y, w, BOTTOM_ROW_H), key))
+        return out
     y = BOTTOM_Y
-    items = [
-        (8, 56, "undo"), (66, 56, "replay"), (124, 56, "hint"),
-        (182, 56, "save"), (240, 50, "music"), (292, 58, "surrender"),
-        (352, 56, "draw"), (410, 74, "export"), (486, 80, "restart"),
-    ]
-    return [(pygame.Rect(x, y, w, BOTTOM_H), key) for x, w, key in items]
+    keys = ["undo", "replay", "hint", "save", "surrender",
+            "draw", "export", "restart", "home"]
+    x0, gap = 8, 6
+    w = (SCREEN_W - x0 * 2 - gap * (len(keys) - 1)) // len(keys)
+    return [(pygame.Rect(x0 + i * (w + gap), y, w, BOTTOM_H), key)
+            for i, key in enumerate(keys)]
 
 
 def export_button_rect():
     for rect, key in bottom_button_rects():
         if key == "export":
             return rect
-    return pygame.Rect(410, BOTTOM_Y, 74, BOTTOM_H)
+    return pygame.Rect(400, BOTTOM_Y, 56, BOTTOM_H)
 
 
 BOTTOM_LABELS = {"undo": "悔棋", "replay": "复盘", "hint": "提示",
                  "save": "存局", "music": "音乐",
                  "surrender": "认输", "draw": "提和",
-                 "export": "棋谱", "restart": "重开"}
+                 "export": "棋谱", "restart": "重开", "home": "返回"}
+
+
+def bottom_label(key):
+    """手机上的「返回」写全成「返回主菜单」——手机没有键盘，光写「返回」不知道回哪；
+    桌面照旧写「返回」，窄按钮塞五个字反而挤。"""
+    if key == "home":
+        return "返回主菜单" if UI_BIG else "返回"
+    return BOTTOM_LABELS.get(key, key)
 
 
 def _vgrad(size, top, bot):
@@ -3900,33 +4426,32 @@ def draw_button_face(screen, rect, fill, border, radius=8, active=False, border_
 
 
 def draw_bottom_buttons(screen, game_over=False, music_on=True):
-    bfont = load_font(13)
+    # 手机版字号提一档：底栏本来就窄，13 号在 1.9 倍缩放下仍偏小
+    bfont = load_font(15 if UI_BIG else 13)
+    sfont = load_font(12)
     for rect, key in bottom_button_rects():
         enabled = not (game_over and key in ("hint", "undo"))
-        if key == "music":
+        if key == "home":
             enabled = True
-        label = BOTTOM_LABELS[key]
+        label = bottom_label(key)
         fill = TH["panel_fill"] if enabled else TH["panel_idle"]
-        if key == "music":
-            fill = C((232, 244, 236)) if music_on else C((238, 234, 228))
-            label = "音乐开" if music_on else "音乐关"
         draw_button_face(screen, rect, fill,
                          C((196, 186, 170)) if enabled else C((170, 164, 154)),
-                         radius=8, active=(key == "music" and music_on))
-        surf = bfont.render(label, True,
-                            TH["text"] if enabled else C((150, 144, 132)))
+                         radius=8)
+        col = TH["text"] if enabled else C((150, 144, 132))
+        surf = bfont.render(label, True, col)
+        if surf.get_width() > rect.w - 8:        # 「返回主菜单」这类长标签降一档字号
+            surf = sfont.render(label, True, col)
         screen.blit(surf, (rect.centerx - surf.get_width() // 2,
                            rect.centery - surf.get_height() // 2))
 
 
 def replay_button_rects():
     y = BOTTOM_Y
-    return [
-        (pygame.Rect(10, y, 100, BOTTOM_H), "prev"),
-        (pygame.Rect(116, y, 100, BOTTOM_H), "next"),
-        (pygame.Rect(222, y, 96, BOTTOM_H), "auto"),
-        (pygame.Rect(324, y, 130, BOTTOM_H), "quit"),
-    ]
+    gap = 8
+    w = (SCREEN_W - 20 - gap * 3) // 4
+    return [(pygame.Rect(10 + i * (w + gap), y, w, BOTTOM_H), key)
+            for i, key in enumerate(("prev", "next", "auto", "quit"))]
 
 
 def draw_replay_controls(screen, index, total, auto):
@@ -3961,10 +4486,11 @@ def naming_turn_rect(panel=None):
 
 
 def draw_edit_scene(screen, board, edit_piece, message, difficulty, sound_on,
-                    move_limit=0):
+                    move_limit=0, music_on=True):
     draw_board(screen)
     draw_pieces(screen, board, None)
-    draw_control_bar(screen, difficulty, sound_on, True, move_limit)
+    draw_control_bar(screen, difficulty, sound_on, True, move_limit,
+                     music_on=music_on)
 
     # 全盘棋子底板：每方 16 枚，摆一枚少一枚
     font = load_font(15)
@@ -4045,7 +4571,7 @@ def draw_library_overlay(screen, entries, edit_message, off=0, category="全部"
                          (cx, sfield.bottom - 5), 1)
 
     io_font = load_font(12)
-    for rect, text in zip(library_io_rects(panel), ("导出库", "导入库")):
+    for rect, text in zip(library_io_rects(panel), ("导出库", "导入库", "恢复")):
         draw_rect(screen, C((250, 246, 238)), rect, 0, 6)
         draw_rect(screen, C((196, 186, 170)), rect, 1, 6)
         surf = io_font.render(text, True, C((92, 82, 68)))
@@ -4068,13 +4594,13 @@ def draw_library_overlay(screen, entries, edit_message, off=0, category="全部"
         cnt_s = load_font(11).render("筛出 %d 局" % total, True, C((146, 134, 118)))
         screen.blit(cnt_s, (panel.right - 14 - cnt_s.get_width(), panel.y + 37))
 
-    # 子数档位：点一下换一档（全部 → ≤4子 → 5-8子 → ≥9子）
+    # 阶段档位：点一下换一档（全部 → 开局 → 中局 → 残局）
     prect = library_piece_rect(panel)
     p_active = pieces != "全部"
     draw_rect(screen, C((34, 150, 96)) if p_active else C((250, 246, 238)), prect, 0, 6)
     draw_rect(screen, C((34, 150, 96)) if p_active else C((196, 186, 170)),
               prect, 1, 6)
-    plabel = "子数 " + ("全部" if not p_active else pieces)
+    plabel = "阶段 " + ("全部" if not p_active else pieces)
     psurf = cfont.render(plabel, True,
                          K((255, 255, 255)) if p_active else C((92, 82, 68)))
     screen.blit(psurf, (prect.centerx - psurf.get_width() // 2,
@@ -4101,25 +4627,24 @@ def draw_library_overlay(screen, entries, edit_message, off=0, category="全部"
         draw_rect(screen, C((238, 248, 240)) if done else C((255, 255, 255)), rect, 0, 8)
         draw_rect(screen, C((120, 176, 132)) if done else C((206, 196, 180)), rect, 1, 8)
 
-        # 行号：按当前筛选结果的顺序编号
+        # 行号：按当前筛选结果的顺序编号。编号区固定 LIB_COL_NO_W 宽并右对齐，
+        # 这样第 100 局以后变成三位数也不会压到后面的难度字上。
         no_s = no_font.render("%02d" % (off + row_i + 1), True, C((146, 134, 118)))
-        screen.blit(no_s, (rect.x + 6, rect.centery - no_s.get_height() // 2))
+        screen.blit(no_s, (rect.x + LIB_COL_NO_W - 4 - no_s.get_width(),
+                           rect.centery - no_s.get_height() // 2))
 
-        # 难度：行号后面一个字（易 / 中 / 难），绿 / 橙 / 红
+        # 难度：编号后面一个字（易 / 中 / 难），绿 / 橙 / 红
         lv = entry_difficulty(entry)
         lv_s = load_font(11).render(LIB_LEVEL_SHORT.get(lv, "·"), True,
                                     C(LIB_LEVEL_COLORS.get(lv, (160, 150, 136))))
-        screen.blit(lv_s, (rect.x + 21, rect.centery - lv_s.get_height() // 2))
+        screen.blit(lv_s, (rect.x + LIB_COL_NO_W + 2,
+                           rect.centery - lv_s.get_height() // 2))
 
         srect = library_star_rect(rect)
         drect = library_delete_rect(rect)
-        rrect = library_rename_rect(rect)
-        name_right, stat_x, origin_x, time_x = library_row_columns(rect)
-        origin = short_origin(entry_origin(entry))
+        name_right, stat_x, time_x = library_row_columns(rect)
         day = stamp_day(entry_saved_at(entry))
-        # 名下没有出处 / 日期时，名字就用掉那块空白（信息少的行名字显示得更完整）
-        if not origin:
-            name_right = (time_x if day else stat_x) - LIB_COL_GAP
+        name_x = rect.x + LIB_COL_NO_W + 18
 
         # 名称：去掉自带的「第001局」，避免与行号重复
         nm = entry.get("name", "未命名")
@@ -4127,13 +4652,14 @@ def draw_library_overlay(screen, entries, edit_message, off=0, category="全部"
         if stripped:
             nm = stripped
         nm_col = C((24, 132, 76)) if done else C((58, 50, 40))
-        nm_s = fit_text(nm, name_font, name_right - (rect.x + 40), nm_col)
-        screen.blit(nm_s, (rect.x + 40, rect.centery - nm_s.get_height() // 2))
+        nm_s = fit_text(nm, name_font, name_right - name_x, nm_col)
+        screen.blit(nm_s, (name_x, rect.centery - nm_s.get_height() // 2))
 
         # 状态列：已通关（绿）/ 黑先（橙）/ 子数（灰）
         if done:
             dm = int(entry.get("done_moves") or 0)
-            stat = ("✔%d手" % dm) if dm else "已通关"
+            # 钩号在部分中文字体里是方框，改成「胜 N 手」最稳
+            stat = ("胜%d手" % dm) if dm else "已通关"
             stat_col = C((24, 132, 76))
         elif entry_turn(entry) == BLACK:
             stat, stat_col = "黑先", C((176, 106, 24))
@@ -4141,11 +4667,6 @@ def draw_library_overlay(screen, entries, edit_message, off=0, category="全部"
             stat, stat_col = "%d子" % len(entry.get("pieces", [])), C((146, 134, 118))
         stat_s = fit_text(stat, meta_font, LIB_COL_STAT_W, stat_col)
         screen.blit(stat_s, (stat_x, rect.centery - stat_s.get_height() // 2))
-
-        # 出处列：适情雅趣 / 经典排局 …（旧数据的 saved 字段里可能是集名）
-        if origin:
-            or_s = fit_text(origin, meta_font, LIB_COL_ORIGIN_W, C((132, 122, 106)))
-            screen.blit(or_s, (origin_x, rect.centery - or_s.get_height() // 2))
 
         # 存盘列：自存条目显示月-日，排局集条目没有存盘时间就留空
         if day:
@@ -4161,13 +4682,6 @@ def draw_library_overlay(screen, entries, edit_message, off=0, category="全部"
         screen.blit(star, (srect.centerx - star.get_width() // 2,
                            srect.centery - star.get_height() // 2))
 
-        # 改名按钮（改）：点开命名浮层，可顺便改先行方
-        draw_rect(screen, C((240, 244, 236)), rrect, 0, 6)
-        draw_rect(screen, C((192, 204, 186)), rrect, 1, 6)
-        pen = fit_text("改", load_font(12), rrect.w - 4, C((70, 112, 82)))
-        screen.blit(pen, (rrect.centerx - pen.get_width() // 2,
-                          rrect.centery - pen.get_height() // 2))
-
         if del_pending == idx:
             draw_rect(screen, C((176, 52, 48)), drect, 0, 8)
             cross = load_font(13).render("确认", True, K((255, 245, 235)))
@@ -4181,7 +4695,7 @@ def draw_library_overlay(screen, entries, edit_message, off=0, category="全部"
         if query:
             tip = "没有符合条件的结果，换个关键词试试"
         elif (pieces and pieces != "全部") or (level and level != "全部"):
-            tip = "这个筛选档位下没有残局，换个档位试试"
+            tip = "这个阶段下没有残局，换个阶段或难度试试"
         elif category == "收藏":
             tip = "还没有收藏：点每行行尾的 ★ 即可收藏"
         elif category == CUSTOM_CATEGORY:
@@ -4208,7 +4722,7 @@ def draw_library_overlay(screen, entries, edit_message, off=0, category="全部"
                                         C((92, 82, 68)) if enabled else C((176, 168, 154)))
             screen.blit(surf, (rect.centerx - surf.get_width() // 2,
                                rect.centery - surf.get_height() // 2))
-    foot = io_msg or ("%d-%d / 共 %d 局　点行载入　★ 收藏　「改」改名"
+    foot = io_msg or ("%d-%d / 共 %d 局　点行载入　★ 收藏　× 删除"
                       % (first, last, total))
     fcol = C((34, 130, 84)) if io_msg else C((128, 116, 100))
     fs = load_font(12).render(foot, True, fcol)
@@ -4450,6 +4964,404 @@ def load_home_bg():
     return surf
 
 
+_SEAL_PNG_B64 = {
+    "中": (
+        "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"
+        "QmCC"
+    ),
+    "国": (
+        "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"
+        "OjAwn2au5AAAAABJRU5ErkJggg=="
+    ),
+    "象": (
+        "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"
+        "MjQ6MTgrMDA6MDDwfvIRAAAAAElFTkSuQmCC"
+    ),
+    "棋": (
+        "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"
+    ),
+}
+
+
+def _seal_image(name):
+    """印章字形原图：优先用同目录的 印章_x.png；缺失就用内置的那份。
+    安卓 APK 里只带 .py、没有这几张图，全靠内置数据兜底。"""
+    path = os.path.join(_ASSET_DIR, "印章_%s.png" % name)
+    if os.path.exists(path):
+        try:
+            return pygame.image.load(path)
+        except (pygame.error, OSError):
+            pass
+    data = _SEAL_PNG_B64.get(name)
+    if data:
+        try:
+            import base64 as _b64
+            import io as _io
+            raw = _b64.b64decode("".join(data))
+            return pygame.image.load(_io.BytesIO(raw))
+        except (pygame.error, OSError, ValueError):
+            pass
+    return None
+
+
 def load_seal_glyphs():
     """小篆印章字形（透明底黑字 PNG → 白字），顺序：中/国/象/棋"""
     if "seal" in _HOME_CACHE:
@@ -4457,11 +5369,10 @@ def load_seal_glyphs():
     glyphs = []
     for name in ("中", "国", "象", "棋"):
         g = None
-        path = os.path.join(_ASSET_DIR, "印章_%s.png" % name)
-        if os.path.exists(path):
+        raw = _seal_image(name)
+        if raw is not None:
             try:
-                s = pygame.image.load(path).convert_alpha()
-                s = pygame.transform.smoothscale(s, (28, 28))
+                s = pygame.transform.smoothscale(raw.convert_alpha(), (28, 28))
                 # 黑字转白字：RGB 拉满、透明度保持不变
                 s.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_MAX)
                 g = s
@@ -4501,20 +5412,31 @@ def draw_seal(screen):
 
 
 def home_button_rects():
-    """主页功能按钮：返回 [(rect, key, label, style), ...]"""
+    """主页功能按钮：返回 [(rect, key, label, style), ...]
+    手机版整排加高加大，并多一个「退出」——直接回手机桌面，
+    不用再靠上滑手势（上滑会切到系统桌面，回来时偶发黑屏）。"""
     cx = SCREEN_W // 2
-    bw, bh, gap = 300, 62, 20
+    if UI_BIG:
+        bw, bh, gap = 340, 74, 18
+        ys = [232, 324, 416, 508]
+        sbw, sbh, sgap, sy = 158, 56, 10, 602
+    else:
+        bw, bh, gap = 300, 62, 20
+        ys = [248, 330, 412, 494]
+        sbw, sbh, sgap, sy = 140, 46, 10, 586
     x = cx - bw // 2
     out = []
-    for y, key, label in zip([248, 330, 412, 494],
+    for y, key, label in zip(ys,
                              ["battle", "endgame", "edit", "import"],
                              ["对　战", "残　局", "摆　棋", "导　入"]):
         out.append((pygame.Rect(x, y, bw, bh), key, label, "primary"))
-    sbw, sbh = 140, 46
-    out.append((pygame.Rect(cx - sbw - 10, 586, sbw, sbh),
-                "settings", "设　置", "secondary"))
-    out.append((pygame.Rect(cx + 10, 586, sbw, sbh),
-                "instructions", "说　明", "secondary"))
+    total = sbw * 3 + sgap * 2
+    sx = cx - total // 2
+    for i, (key, label) in enumerate((("settings", "设　置"),
+                                      ("instructions", "说　明"),
+                                      ("quit", "退　出"))):
+        out.append((pygame.Rect(sx + i * (sbw + sgap), sy, sbw, sbh),
+                    key, label, "secondary"))
     return out
 
 
@@ -4552,17 +5474,17 @@ def draw_home(screen, bgm_name, hover=None):
                              (34, 150, 96), radius=10, active=hot, border_w=2)
             draw_rect(screen, (34, 150, 96),
                       pygame.Rect(box.x + 2, box.y + 6, 6, box.h - 12), 0, 3)
-            surf = load_font(26).render(label, True, (58, 46, 36))
+            surf = load_font(28 if UI_BIG else 26).render(label, True, (58, 46, 36))
         else:
             draw_button_face(screen, box, (246, 239, 226) if hot else (244, 236, 222),
                              (34, 150, 96) if hot else (196, 186, 170), radius=8, active=hot)
-            surf = load_font(18).render(label, True, (86, 74, 60))
+            surf = load_font(20 if UI_BIG else 18).render(label, True, (86, 74, 60))
         screen.blit(surf, (box.centerx - surf.get_width() // 2,
                            box.centery - surf.get_height() // 2))
 
     # 右下角版本与创作者（宋体小字）——向左提一格，不贴右边框
-    ver = load_font_song(13).render(
-        "中国象棋·智算单机版 v%s　·　制作人：%s" % (VERSION, CREATOR), True, C((110, 86, 62)))
+    ver = load_font_song(16 if UI_BIG else 13).render(
+        "中国象棋·智算单机版 v%s　·　制作人：%s" % (VERSION, CREATOR), True, C((92, 68, 46)))
     screen.blit(ver, (SCREEN_W - 18 - HOME_CREDIT_DX - ver.get_width(), SCREEN_H - 46))
     # 左下角背景出处
     if bg:
@@ -4613,6 +5535,11 @@ def settings_hitboxes(state):
         col, row = i % 4, i // 4
         items.append((pygame.Rect(p.x + 26 + col * 100, y + row * 32, 96, 30),
                       "bgm", name))
+    # 导入 / 删曲：放在「背景古曲」标题那一行的右端，曲目行保持一行 4 个
+    items.append((pygame.Rect(p.right - 194, p.y + 412, 84, 26),
+                  "music_import", "导入曲子"))
+    items.append((pygame.Rect(p.right - 100, p.y + 412, 72, 26),
+                  "music_delete", "删曲"))
     y = p.y + 532
     x = p.x + 26
     for label, val in UNDO_LIMITS:
@@ -4651,13 +5578,12 @@ def draw_settings_overlay(screen, state):
     # 音量滑块标签
     screen.blit(sfont.render("音效音量", True, C((96, 82, 66))), (p.x + 24, p.y + 232))
     screen.blit(sfont.render("音乐音量", True, C((96, 82, 66))), (p.x + 262, p.y + 232))
-    # 曲目小提示：曲 目录里有几首，没文件的曲目用内置合成音
+    # 曲目小提示：曲目录里有几首（有上限）、没文件的曲目用内置合成音
     n_music = len(music_library())
-    tip = "曲 目录 %d 首：绿框是文件，灰框是合成" % n_music
+    tip = "曲目录 %d/%d 首：绿框是文件（选中后点「删曲」），灰框是合成" % (
+        n_music, MUSIC_MAX_FILES)
     if len(bgm_names()) > BGM_MAX:
         tip += "　只看前 %d 首" % BGM_MAX
-    tip_s = fit_text(tip, sfont, p.right - 30 - (p.x + 130), C((150, 138, 122)))
-    screen.blit(tip_s, (p.x + 130, p.y + 418))
 
     items, _ = settings_hitboxes(state)
     bfont = load_font(14)
@@ -4690,7 +5616,17 @@ def draw_settings_overlay(screen, state):
                                          else "music_vol", 0.8))
             continue
         on = active(cat, val)
-        if cat == "bgm":
+        action_off = False          # 动作按钮是否置灰（比如没选中文件曲目时的「删曲」）
+        if cat in ("music_import", "music_delete"):
+            # 动作按钮，不是开关：白底绿边；「删曲」在没选中文件曲目时置灰
+            if cat == "music_delete":
+                action_off = not (isinstance(state.get("bgm"), str)
+                                  and has_music_file(state["bgm"]))
+            draw_rect(screen, C((246, 250, 244)) if not action_off else C((242, 240, 234)),
+                      rect, 0, 8)
+            draw_rect(screen, C((34, 150, 96)) if not action_off else C((198, 192, 180)),
+                      rect, 1, 8)
+        elif cat == "bgm":
             real = has_music_file(val)
             draw_rect(screen, C((34, 150, 96)) if on else
                       (C((244, 240, 232)) if real else C((250, 246, 238))), rect, 0, 8)
@@ -4717,10 +5653,19 @@ def draw_settings_overlay(screen, state):
         else:
             label = str(val)
         col = K((255, 255, 255)) if on else C((86, 74, 60))
+        if action_off:
+            col = C((168, 160, 146))
         surf = (fit_text(label, bfont, rect.w - 18, col) if cat == "bgm"
                 else bfont.render(label, True, col))
         screen.blit(surf, (rect.centerx - surf.get_width() // 2,
                            rect.centery - surf.get_height() // 2))
+
+    # 底部一行：有操作回执就显示回执，没有就显示曲目提示
+    msg = str(state.get("settings_msg") or "")
+    line = msg or tip
+    color = C((34, 150, 96)) if msg else C((150, 138, 122))
+    ms = fit_text(line, load_font(12), p.w - 52, color)
+    screen.blit(ms, (p.x + 26, p.y + 620))
 
 
 def draw_volume_slider(screen, rect, value):
@@ -4748,29 +5693,50 @@ HELP_LH = 21
 
 HELP_PARAS = [
     "欢迎使用《中国象棋·智算单机版 v%s》—— 计时对弈与残局研究。" % VERSION,
+    "【两个版本】同一份程序，规则、AI、残局库、按钮文案完全一致，只在「怎么操作」上各让一步。"
+    "安卓版：竖屏全屏、手指点选；底栏排成两排——上排 悔棋/提示/复盘/存局/返回主菜单，"
+    "下排 认输/提和/棋谱/重开，格子比桌面版大一号，拇指够得着；冷启动有一段开机动画，"
+    "棋子在转，等的时候不干等；设置、残局库、曲子都存在应用私有目录，不占相册、不用存储权限；"
+    "设置里能直接导入曲子、删曲子，不用连电脑。"
+    "桌面版：窗口可缩放，鼠标右键摆棋删子；导入曲子走系统文件对话框，能一次挑好几个文件；"
+    "键盘 Esc 关浮层、回车确认；存档、棋谱、曲目录都在 exe 旁边，拷走就能搬去另一台机器。"
+    "一句话：手机上胜在随手就能下，桌面上胜在摆棋、整理谱子方便。",
     "【对战】红方先行：点棋子再点落点，绿点可走、红圈可吃；电脑执黑，每方限时包干。"
     "轮到哪方走，他的将/帅旁边就亮起一只单步计时圆表：十二个刻度像座钟，指针一圈"
     "走完这一手的限时，圈心写这手还剩几秒，旁边一句「该你走」/「思考中…」；"
-    "不走的一方不画表。将死、困毙定胜负；六十回合无吃子判和。同一局面第 3 次出现时"
+    "不走的一方不画表。将死、困毙定胜负；子力不足（双方只剩将帅士象，至多各一匹单马）"
+    "立刻判和，不再磨到六十回合。六十回合无吃子判和。同一局面第 3 次出现时"
     "按整轮循环裁决：哪一方每一着都在将军，哪一方判长将负（被连将、只能来回躲帅的一方"
     "不受罚）；双方都不将军则判和。走子前会先拦住重复，留出换着法的余地；"
     "电脑也会另择路线，不主动长将。",
-    "【单步限时】设置面板与对战顶部栏的「单步」按钮都能调：不限 / 15 / 30 / 60 秒。"
+    "【和棋】除了规则判和，程序会自己开口提和：盘上只剩 8 枚子以内、或连续 40 个"
+    "半回合没吃子、或同一局面反复出现，而它也没占到便宜时，会弹窗把盘面说清楚"
+    "（我剩什么子、你剩什么子、多少回合没吃子），话很直白，不讲条文。"
+    "点「同意和棋」就握手言和、这一局到此结束；点「继续下」接着走，"
+    "过了几手它可能再提一次（间隔一次比一次长，约 6 / 12 / 18 个回合），一局最多提三回，"
+    "第三回被拒就不再提。弹窗开着时计时暂停，慢慢看、慢慢决定；"
+    "您也可以点「提和」主动找它和，它觉得自己没占到明显便宜就会答应。",
+    "【认输】它只剩光杆老将、您手上还有车能破防时，先低头求和："
+    "答应就和棋；不答应它就再撑 3 个回合，然后弹「认输」。认输弹窗里点"
+    "「继续下」，这局就不算完 —— 它不再提和也不再认输，非得您把将吃掉（将死）才结束。",
+    "【单步限时】设置面板与对战顶部栏的「步限」按钮都能调：不限 / 15 / 30 / 60 秒。"
     "选「不限」时圆表只正计时（指针 60 秒一圈，圈心写这一手用了多久）；设了限时则倒计时，"
     "剩 10 秒内圆表转红，一圈走完还没落子即判单步超时负。",
-    "【残局】按 全部 / 经典残局 / 江湖排局 / 自定残局 / 收藏 切换；每行开头是行号，"
-    "行尾「改」改名、★ 收藏、× 删除（点两次确认）；行内另标出处、存盘日期与子数，"
-    "赢下的显绿色「已通关」并记下用的手数（再赢一次且手数更少才会刷新记录）。"
-    "分类行最右的「子数」按钮按双方棋子总数筛档：全部 / ≤4子 / 5-8子 / ≥9子，"
-    "找车兵残局这种题更省事。"
-    "底下一行还有「难度」按钮，按先手方（解题那方）的处境把每局分成 简单 / 中等 / 困难："
+    "【残局】按 全部 / 经典残局 / 江湖排局 / 自定残局 / 收藏 切换；每行开头是编号"
+    "（100 局以后是三位数，照样不挤），行尾 ★ 收藏、× 删除（点两次确认）；"
+    "行内标「已通关 / 黑先 / 子数」和存盘日期。"
+    "底下一行两个筛选按钮：「阶段」按盘上棋子多少分成 全部 / 开局 / 中局 / 残局"
+    "（双方合计 20 子以上算开局，11-19 子算中局，10 子以下才算残局），"
+    "想练开局还是专挑残局一眼就能分开；"
+    "「难度」按钮按先手方（解题那方）的处境把每局分成 简单 / 中等 / 困难："
     "先手方子力领先得多、或有一眼就能看到的直接杀着，算简单；少子硬做、第一步就被将军、"
     "盘上着法又多得挑不出唯一正解，算困难。行号后面那道竖线就是难度色：绿 / 橙 / 红。"
     "搜索框里敲数字按局号找：输 94 能搜到「第094局」，输 3 也能定位列表第 3 条。"
     "↑↓ 逐行、PgUp/PgDn 整屏、Home/End 到两端；"
-    "「导出库 / 导入库」备份或合并整库，写库前留 5 份 .bak；"
-    "导入按「局面 + 先行方」去重，同一个局面换个名字也不会重复堆一遍；"
-    "改名可顺手切红先 / 黑先。",
+    "「导出库 / 导入库」备份或合并整库，写库前留 3 份 .bak；"
+    "「恢复」用最近一份备份盖回当前库（4 秒内点两次才执行，覆盖前会把当前库另存一份），"
+    "改乱了、误删了一片，点它就能退回去；"
+    "导入按「局面 + 先行方」去重，同一个局面换个名字也不会重复堆一遍。",
     "【存局】对战、残局、摆棋都能存：底部「存局」（摆棋里「保存」），先按规则校验，"
     "再起名字，存入「自定残局」分类。",
     "【摆棋】棋子摆一枚少一枚。双方各须一枚将/帅、除将帅外至少一枚子，"
@@ -4783,8 +5749,11 @@ HELP_PARAS = [
     "（拖动时棋子跟着鼠标走，落点有绿点提示）。走子有滑行动画，被吃的子会淡出，"
     "落定后荡开一圈涟漪；落子声上三路清脆、下三路低沉，听着像在真棋盘上敲。"
     "电脑算完不会立刻落子，至少「想」半秒，看得清它走哪。",
-    "【对局按钮】悔棋 / 复盘 / 提示 / 存局 / 音乐 / 认输 / 提和 / 棋谱 / 重开："
-    "「提示」给一手建议并标在棋盘上；「提和」由电脑按形势决定；「音乐」随手开关背景乐；"
+    "【对局按钮】手机上下两排：上排 悔棋 / 提示 / 复盘 / 存局 / 返回主菜单，"
+    "下排 认输 / 提和 / 棋谱 / 重开（桌面是一排九个）；"
+    "「提示」在后台深搜一手建议并标在棋盘上（约四五秒，界面不卡）；"
+    "「提和」由电脑按形势决定；「音乐」开关挪到顶栏、紧挨着「音效」；"
+    "「返回主菜单」等于退出这一局回主页，不存半局；"
     "悔棋次数可在设置里限定为不限 / 三次 / 五次。",
     "【难度】简单 / 普通 / 困难 / 大师四档：简单会随手走错，普通偶尔失手，"
     "困难与大师不失手、算得更深（大师每步最多算 8 层，约 5.5 秒），越往后防守越紧。"
@@ -4796,17 +5765,71 @@ HELP_PARAS = [
     "【设置】难度、音效与音乐开关、音量滑块、对战总时间、单步限时、背景曲、悔棋限制、"
     "棋盘配色（原木 / 墨玉）都能调整并自动保存，墨玉下浮层也换成深色；"
     "电脑改在后台思考，算棋时窗口照常响应。主页背景想换成自己的画：把图片命名成 主页背景.jpg 放在程序目录即可。",
-    "【自己加曲子】程序旁的 曲 目录里放 mp3 / ogg / wav，文件名就是曲名："
-    "放「渔舟唱晚.mp3」设置里就多一个「渔舟唱晚」，放几首就多几个，删掉即消失，"
-    "不必改程序。内置四首古曲（高山流水 / 平沙落雁 / 渔舟唱晚 / 广陵散）"
+    "【自己加曲子】设置面板里点「导入曲子」，挑一首 mp3 / ogg / wav，最多收 4 首，"
+    "导入后曲目行立刻多一个按钮（名字太长会自动截短，免得一格放不下）。"
+    "想删：先点中那首导入的曲子，再点「删曲」，4 秒内点第二次即删（内置古曲删不掉）。"
+    "也可以直接把文件丢进程序旁的 曲 目录，删掉即消失，不必改程序。"
+    "内置四首古曲（高山流水 / 平沙落雁 / 渔舟唱晚 / 广陵散）"
     "在没有同名文件时用程序合成的旋律顶上。音效同理：音效 目录放 "
     "select.wav / 落子.wav / 吃子.wav / 将军.wav / 胜利.wav 即替换内置音效。",
-    "【退出】按 Esc 或点窗口关闭键都不会直接退出：浮层先关，对局先回主页，"
-    "仅在主页才能退出。",
+    "【退出】按 Esc、点底部「返回」或点窗口关闭键都不会直接退出：浮层先关，"
+    "对局先回主页；回到主页再点右下角「退出」才真正结束程序（手机上是回手机桌面）。",
+    "【升级安装】手机换新版安装包时，系统若提示「签名不一致 / 无法覆盖安装」，"
+    "是两版安装包签名不同，不是程序坏了。处理办法：先在残局库点「导出库」把库存到"
+    "手机别的目录（卸载会清掉应用内的残局库.json、自定义曲子和音效），"
+    "再在手机设置里卸载旧版，然后装新版，装完用「导入库」把库恢复即可。"
+    "同一签名之后的版本都能直接覆盖安装，不必再卸。",
     "快捷键：E 摆棋 · U 悔棋 · P 复盘 · H 提示 · G 棋谱 · L 残局库 · M 音乐 · "
     "R 重开 · 1/2 示例与开局 · Esc 返回。本说明能用鼠标翻：滚轮上下、点「上一页 / 下一页」，"
     "点正文左半往回、右半往前；也可以用 ← → 或 PgUp / PgDn。",
 ]
+
+
+def help_paras():
+    """说明页段落。安卓上换成触屏说法：键盘快捷键整段撤掉，
+    「按 Esc」「按 R」这类改成点按钮，曲子目录改成手机能拷进去的位置。"""
+    if not IS_ANDROID:
+        return HELP_PARAS
+    out = []
+    for para in HELP_PARAS:
+        p = para
+        if p.startswith("快捷键"):
+            continue
+        p = p.replace("↑↓ 逐行、PgUp/PgDn 整屏、Home/End 到两端；", "")
+        p = p.replace("搜索框里敲数字按局号找：输 94 能搜到「第094局」，"
+                      "输 3 也能定位列表第 3 条。", "")
+        p = p.replace("对战中按 Esc 只回主页、不再存半局，",
+                      "对战中点底部「返回」只回主页、不再存半局，")
+        p = p.replace("（拖动时棋子跟着鼠标走，落点有绿点提示）",
+                      "（拖动时棋子跟着手指走，落点有绿点提示）")
+        p = p.replace("主页背景想换成自己的画：把图片命名成 主页背景.jpg 放在程序目录即可。", "")
+        p = p.replace("悔棋 / 复盘 / 提示 / 存局 / 认输 / 提和 / 棋谱 / 重开 / 返回：",
+                      "悔棋 / 提示 / 复盘 / 存局 / 返回主菜单 / 认输 / 提和 / 棋谱 / 重开：")
+        p = p.replace("「返回」等于退出这一局回主页，不存半局；",
+                      "「返回主菜单」等于退出这一局回主页，不存半局；")
+        if p.startswith("【退出】"):
+            p = ("【退出】点底部「返回主菜单」回主页，浮层点右上角 × 关闭；"
+                 "手机的返回键也一样：先关浮层、再回主页。"
+                 "回到主页后点右下角「退出」即回手机桌面（不用再靠上滑手势）。")
+        elif p.startswith("【自己加曲子】"):
+            p = ("【自己加曲子】手机没有系统文件对话框，所以「导入曲子」按钮会告诉你放在哪："
+                 "把 mp3 / ogg / wav 拷到 Android/data/org.songyq.xiangqi/files/曲 目录"
+                 "（没有就新建一个），回来设置面板就能看到新曲目，最多收 4 首，"
+                 "名字太长会截短显示。想删掉导入的曲子：在设置里点中它，再点「删曲」，"
+                 "4 秒内点第二次即删（内置古曲删不掉）。拷法：数据线连电脑选「文件传输」，"
+                 "或用手机文件管理进那个目录。内置四首古曲（高山流水 / 平沙落雁 / "
+                 "渔舟唱晚 / 广陵散）在没有同名文件时用程序合成的旋律顶上。"
+                 "音效同理：同目录建 音效 文件夹，放 select.wav / 落子.wav / "
+                 "吃子.wav / 将军.wav / 胜利.wav 即替换内置音效。")
+        elif p.startswith("【导入】"):
+            p = p.replace("或点「选文件」挑 棋谱 目录里的 .txt；", "")
+        # 手机版把「电脑」都改口成「手机」：同一个手机里没有电脑这回事，
+        # 只有「数据线连电脑」那句说的是真的电脑，先护住再换。
+        p = p.replace("数据线连电脑", "\x00PC\x00")
+        p = p.replace("电脑", "手机")
+        p = p.replace("\x00PC\x00", "数据线连电脑")
+        out.append(p)
+    return out
 
 
 def help_pages():
@@ -4816,7 +5839,10 @@ def help_pages():
     max_w = HELP_PANEL.w - 48
     cap = max(4, (HELP_TEXT_BOTTOM - HELP_TEXT_TOP) // HELP_LH)
     pages, cur = [], []
-    for para in HELP_PARAS:
+    # 注意：这里要走 help_paras() 而不是 HELP_PARAS ——
+    # 手机上 help_paras() 会把快捷键那段和「按 Esc」这类桌面说法换掉，
+    # 以前这里直接读 HELP_PARAS，等于安卓的改写白做了。
+    for para in help_paras():
         block = [""] + wrap_text(para, font, max_w) if cur else wrap_text(para, font, max_w)
         if len(cur) + len(block) > cap:
             if cur:
@@ -4871,9 +5897,10 @@ def draw_instructions_overlay(screen, page=0, hover=None):
 
     # 本页没写满又还有下一页：在正文底部点明「后面还有」，免得以为只有一页
     if page < total - 1 and y < HELP_TEXT_BOTTOM - HELP_LH:
+        more_text = ("↓ 后面还有 %d 页，点「下一页」继续看" if IS_ANDROID
+                     else "↓ 后面还有 %d 页，点「下一页」或滚动滚轮继续看")
         more = load_font(13).render(
-            "↓ 后面还有 %d 页，点「下一页」或滚动滚轮继续看" % (total - page - 1),
-            True, C((34, 150, 96)))
+            more_text % (total - page - 1), True, C((34, 150, 96)))
         screen.blit(more, (p.centerx - more.get_width() // 2, HELP_TEXT_BOTTOM - 6))
 
     bfont = load_font(14)
@@ -4892,7 +5919,8 @@ def draw_instructions_overlay(screen, page=0, hover=None):
                            rect.centery - surf.get_height() // 2))
     num = load_font(15).render("第 %d / %d 页" % (page + 1, total), True, C((110, 96, 78)))
     screen.blit(num, (p.centerx - num.get_width() // 2, HELP_PREV.centery - num.get_height() // 2))
-    tip = load_font(12).render("滚轮 / 点左右翻页", True, C((156, 144, 128)))
+    tip = load_font(12).render("点左右翻页" if IS_ANDROID else "滚轮 / 点左右翻页",
+                               True, C((156, 144, 128)))
     screen.blit(tip, (HELP_CLOSE.x - 14 - tip.get_width(), p.y + 36))
     return total
 
@@ -4982,10 +6010,158 @@ def draw_import_overlay(screen, state):
         screen.blit(ms, (p.x + 24, msg_y))
 
 
+def finish_app():
+    """主动退出：手机上限时结束 Activity 才能回到桌面（只 sys.exit 有些机型会留黑屏）。"""
+    if IS_ANDROID:
+        try:
+            from android import mActivity          # type: ignore
+            if mActivity is not None:
+                mActivity.finish()
+        except Exception:
+            try:
+                from jnius import autoclass        # type: ignore
+                autoclass("org.kivy.android.PythonActivity").mActivity.finish()
+            except Exception:
+                pass
+
+
+class BootSplash:
+    """手机冷启动的开机动画：一枚棋子当表盘，外圈金点绕着转，下面一条进度条
+    跟着加载步骤往前走。桌面不显示——窗口一闪就开，动画反而挡事。
+
+    只在主线程画：初始化里最重的 ensure_library 丢给后台线程，主线程一直 tick，
+    「棋子在转」和「残局库在读」是同时发生的，不会卡成一张静止图。
+    """
+
+    MIN_SECONDS = 1.4          # 至少转一圈，别一闪而过
+    FADE_SECONDS = 0.25
+
+    def __init__(self, screen, present):
+        self.screen = screen
+        self.present = present
+        self.t0 = time.perf_counter()
+        self.msg = "正在载入棋局"
+        self.progress = 0.08
+        self.frames = 0
+        self._font_pair = None
+        self._font_dead = False
+
+    def _fonts(self):
+        """中文字体第一次画才去找；找不到就退回几何纹样，绝不让启动画面自己崩"""
+        if self._font_dead:
+            return None
+        if self._font_pair is None:
+            try:
+                self._font_pair = (load_font_song(92), load_font_song(17))
+            except Exception:
+                self._font_dead = True
+                return None
+        return self._font_pair
+
+    def _paint(self, t):
+        scr = self.screen
+        scr.fill(C((24, 32, 28)))
+        cx, cy = SCREEN_W // 2, 396
+        for r in (196, 158):
+            pygame.draw.circle(scr, C((36, 46, 40)), (cx, cy), r, 1)
+
+        # 外圈：24 颗点，连续 6 颗点亮，随时间绕着走
+        ticks = 24
+        head = int(t * 26) % ticks
+        for i in range(ticks):
+            ang = i * 2 * math.pi / ticks - math.pi / 2
+            px = cx + int(math.cos(ang) * 168)
+            py = cy + int(math.sin(ang) * 168)
+            lit = (i - head) % ticks < 6
+            pygame.draw.circle(scr, C((216, 172, 86)) if lit else C((56, 68, 58)),
+                               (px, py), 4 if lit else 3)
+
+        # 棋子圆盘 + 双圈
+        pygame.draw.circle(scr, C((240, 228, 200)), (cx, cy), 116)
+        pygame.draw.circle(scr, C((124, 86, 50)), (cx, cy), 116, 3)
+        pygame.draw.circle(scr, C((178, 142, 94)), (cx, cy), 99, 2)
+
+        pair = None if self.frames < 1 else self._fonts()
+        if pair:
+            big, small = pair
+            word = big.render("象", True, C((112, 66, 36)))
+            scr.blit(word, (cx - word.get_width() // 2,
+                            cy - word.get_height() // 2 - 6))
+            tip = small.render(self.msg, True, C((198, 180, 148)))
+            scr.blit(tip, (cx - tip.get_width() // 2, cy + 148))
+            ver = small.render("中国象棋·智算单机版 v%s　安卓版" % VERSION,
+                               True, C((122, 110, 90)))
+            scr.blit(ver, (cx - ver.get_width() // 2, SCREEN_H - 56))
+        else:
+            # 字体还没热起来的第一帧：画个内纹，别让画面空着
+            pygame.draw.line(scr, C((178, 142, 94)), (cx - 44, cy), (cx + 44, cy), 2)
+            pygame.draw.line(scr, C((178, 142, 94)), (cx, cy - 44), (cx, cy + 44), 2)
+
+        bar = pygame.Rect(cx - 130, cy + 196, 260, 6)
+        draw_rect(scr, C((46, 58, 50)), bar, 0, 3)
+        if self.progress > 0:
+            fill = pygame.Rect(bar.x, bar.y,
+                               max(6, int(bar.w * self.progress)), bar.h)
+            draw_rect(scr, C((216, 172, 86)), fill, 0, 3)
+
+    def tick(self, msg=None, progress=None):
+        if msg:
+            self.msg = msg
+        if progress is not None:
+            self.progress = max(0.02, min(1.0, progress))
+        for _ev in pygame.event.get():      # 加载期间的事件一律吞掉，别攒进主循环
+            pass
+        self._paint(time.perf_counter() - self.t0)
+        self.frames += 1
+        self.present()
+        pygame.time.wait(12)
+
+    def finish(self):
+        """收尾：补够最短时长，再淡出，不硬切"""
+        while time.perf_counter() - self.t0 < self.MIN_SECONDS:
+            self.tick(progress=max(self.progress, 0.92))
+        self.tick(progress=1.0)
+        begin = time.perf_counter()
+        while time.perf_counter() - begin < self.FADE_SECONDS:
+            k = (time.perf_counter() - begin) / self.FADE_SECONDS
+            self._paint(time.perf_counter() - self.t0)
+            veil = pygame.Surface((SCREEN_W, SCREEN_H))
+            veil.fill((0, 0, 0))
+            veil.set_alpha(int(255 * min(1.0, k)))
+            self.screen.blit(veil, (0, 0))
+            self.present()
+            pygame.time.wait(12)
+
+
+def bg_prepare(fn, splash=None, msg=None):
+    """把耗时的准备活丢到后台线程，主线程继续转动画，结束再把结果 / 异常交回来。
+    异常原样抛回主线程，不在后台悄悄吞掉。"""
+    box = {}
+
+    def work():
+        try:
+            box["value"] = fn()
+        except BaseException as exc:
+            box["error"] = exc
+
+    th = threading.Thread(target=work, name="xq-boot", daemon=True)
+    th.start()
+    while th.is_alive():
+        if splash is not None:
+            splash.tick(msg)
+        else:
+            time.sleep(0.02)
+    if "error" in box:
+        raise box["error"]
+    return box.get("value")
+
+
 def main():
     # 触屏：让 SDL 把手指事件同时映射成鼠标事件，整套点选逻辑不用改
     os.environ.setdefault("SDL_TOUCH_MOUSE_EVENTS", "1")
     os.environ.setdefault("SDL_MOUSE_TOUCH_EVENTS", "1")
+    # 切到后台（手机手势上滑 / 来电）时别让 SDL 把窗口缩成 0，回来容易黑屏
+    os.environ.setdefault("SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS", "0")
     pygame.mixer.pre_init(SAMPLE_RATE, -16, 2, 512)
     pygame.init()
 
@@ -5027,6 +6203,15 @@ def main():
         win_w = max(320, int(SCREEN_W * scale))
         win_h = max(420, int(SCREEN_H * scale))
         display = pygame.display.set_mode((win_w, win_h))
+    # 屏幕探针：main.py 启动时先量真实分辨率写进 XQ_BIG_UI；直接跑源码时按窗口尺寸判断。
+    # 手机（短边 ≥720 物理像素）自动切到放大版界面，桌面保持原尺寸。
+    big_env = os.environ.get("XQ_BIG_UI")
+    if big_env == "1":
+        set_ui_mode(True)
+    elif big_env == "0" and not IS_ANDROID:
+        set_ui_mode(False)
+    else:
+        set_ui_mode(IS_ANDROID or min(win_w, win_h) >= 720)
     draw_w, draw_h, off_x, off_y = fit_layout(win_w, win_h)
     screen = pygame.Surface((SCREEN_W, SCREEN_H))
     pygame.display.set_caption("%s v%s · 计时对弈" % (APP_NAME, VERSION))
@@ -5053,8 +6238,15 @@ def main():
     def to_logical(pos):
         return window_to_logical(pos, win_w, win_h)
 
+    # v2.9：手机冷启动要等好几秒，先上一段开机动画。桌面不显示。
+    boot = BootSplash(screen, present) if IS_ANDROID else None
+    if boot:
+        boot.tick("正在载入设置", 0.10)
+
     settings0 = load_settings()
     apply_theme(settings0.get("theme", THEME_NAMES[0]))
+    if boot:
+        boot.tick("正在准备棋盘", 0.22)
     # 背景音乐：旧存档里 "bgm": "关" 视为关闭，曲目回落到第一首
     pool = bgm_names()
     bgm0 = settings0.get("bgm", pool[0])
@@ -5088,10 +6280,11 @@ def main():
                      "除将帅外至少还要一枚棋子，士象车马炮最多 2、兵卒最多 5；"
                      "落点亦须合法——将帅士不出九宫、象不过河、兵卒不后退。"),
         "position": "残局示例",
-        "entries": ensure_library(),
+        "entries": (bg_prepare(ensure_library, boot, "正在整理残局库")
+                    if boot else ensure_library()),
         "lib_open": False,
         "lib_category": "全部",
-        "lib_pieces": "全部",     # 子数筛选档位（全部 / ≤4子 / 5-8子 / ≥9子）
+        "lib_pieces": "全部",     # 阶段筛选档位（全部 / 开局 / 中局 / 残局）
         "lib_level": "全部",      # 难度筛选档位（全部 / 简单 / 中等 / 困难，按先手方处境算）
         "lib_off": max(0, int(settings0.get("lib_page", 0))),
         "history": [],
@@ -5118,6 +6311,7 @@ def main():
         "import_buf": "",
         "import_focus": False,
         "import_msg": "",
+        "settings_msg": "",        # 设置面板底部的一行回执（导入曲子 / 换曲目）
         # ---- v1.1 新增 ----
         "sound_vol": max(0.0, min(1.0, float(settings0.get("sound_vol", DEFAULT_SOUND_VOL)))),
         "music_vol": max(0.0, min(1.0, float(settings0.get("music_vol", DEFAULT_MUSIC_VOL)))),
@@ -5135,12 +6329,23 @@ def main():
         "lib_focus": False,
         "lib_io_msg": "",
         "ai_job": None,          # 后台思考中的 AI 任务（AiJob）
+        "hint_job": None,        # 后台算「提示」的任务（AiJob），不卡界面
+        "cpu_offer": None,       # 电脑提议和棋 / 认输：{kind, reason} 或 None（弹窗显示中）
+        "cpu_offer_no": -99,     # 上次人类拒绝提和时的半回合数（隔几手才再提）
+        "cpu_offer_times": 0,    # 这一局已经主动议和过几次（最多 DRAW_OFFER_MAX 回）
+        "music_del_pending": 0.0,  # 设置里点「删曲」的时间，4 秒内再点一次才真删
+        "cpu_given_up": False,   # 人类拒绝过「电脑认输」：之后不再提和、不再认输
+        "resign_at": 10 ** 9,    # 必败局里被拒和棋后，走到这个半回合数就认输
+        "offer_elapsed": 0.0,    # 弹窗弹出时的本手用时（弹窗期间冻结计时）
+        "quit_requested": False,  # 主页点了「退出」
         "lib_entry": "",
         "start_turn": RED,                # 当前局面的起始先行方（黑先排局为黑）
         "naming_mode": "save",            # save（存局）/ edit（摆棋）/ rename（改名）
         "rename_idx": None,
         "rename_turn": RED,
     }
+    if boot:
+        boot.tick("马上就好", 0.90)
 
     # v2.4：暂存半局功能已撤掉，旧设置里攒下的条目不再读入（见 persist_settings 里清键）
 
@@ -5239,6 +6444,11 @@ def main():
         S["move_hints"] = []
         S["hint"] = None
         S["surrender_pending"] = False
+        S["cpu_offer"] = None      # 新开一局：把上一局的提和弹窗关掉
+        S["cpu_offer_no"] = -99
+        S["cpu_offer_times"] = 0   # 议和次数按局清零，新局还能再提三回
+        S["cpu_given_up"] = False  # 上一局「不用你认输」的态度不带进新局
+        S["resign_at"] = 10 ** 9
         S["undo_left"] = S["undo_limit"]
 
     def reset_position(title):
@@ -5580,6 +6790,8 @@ def main():
 
     def open_overlay(name):
         S["home_overlay"] = name
+        if name == "settings":
+            S["settings_msg"] = ""        # 每次打开都干净起手，不带上次的回执
         if name == "instructions":
             S["help_page"] = 0            # 每次都从第一页看起
         if name == "import":
@@ -5764,12 +6976,20 @@ def main():
                     running = False
             return
         # 说明浮层：滚轮上下翻页（老式滚轮是 button 4 / 5，也照收）
+        # 以前滚一格常常一下翻两页：Windows 滚轮一格会连发两个 MOUSEWHEEL 事件。
+        # 现在 0.15 秒内的重复滚动算同一次，想连翻两页就分两次滚（间隔够 0.15 秒）。
         if S["home_overlay"] == "instructions":
             if event.type == pygame.MOUSEWHEEL:
-                help_turn_page(-1 if event.y > 0 else 1)
+                now = time.perf_counter()
+                if now - S.get("help_wheel_t", 0.0) >= 0.15:
+                    S["help_wheel_t"] = now
+                    help_turn_page(-1 if event.y > 0 else 1)
                 return
             if event.type == pygame.MOUSEBUTTONDOWN and event.button in (4, 5):
-                help_turn_page(-1 if event.button == 4 else 1)
+                now = time.perf_counter()
+                if now - S.get("help_wheel_t", 0.0) >= 0.15:
+                    S["help_wheel_t"] = now
+                    help_turn_page(-1 if event.button == 4 else 1)
                 return
         if event.type != pygame.MOUSEBUTTONDOWN or event.button != 1:
             return
@@ -5821,9 +7041,52 @@ def main():
                         S["bgm"] = val
                         stop_bgm()
                         persist_settings()
+                        S["settings_msg"] = "曲目已换成「%s」。" % val
                         if not S["bgm_on"]:
-                            S["edit_msg"] = "已换曲目，但背景音乐仍是关闭状态（点上面的开关或按 M 打开）。"
+                            S["settings_msg"] = "已换曲目，但背景音乐还关着（上面点「开」）。"
                         beep("select")
+                    elif cat == "music_import":
+                        if IS_ANDROID:
+                            # 安卓没有 tkinter 文件对话框：告诉用户把文件放哪儿，
+                            # 拷进去后曲目会自动出现在上面那一行
+                            d = music_write_dir() or "曲"
+                            S["settings_msg"] = (
+                                "拷到 Android/data/org.songyq.xiangqi/files/曲 即可（最多 %d 首）"
+                                % MUSIC_MAX_FILES)
+                            beep("illegal")
+                        else:
+                            ok, msg = import_music_file(pick_music_file())
+                            S["settings_msg"] = msg
+                            beep("select" if ok else "illegal")
+                    elif cat == "music_delete":
+                        # 删曲只删「当前选中」那一首，而且只删曲 目录里的文件；
+                        # 内置古曲删不掉（程序合成的，删了没得听）。点两次才真删。
+                        name = S.get("bgm") or ""
+                        if not has_music_file(name):
+                            S["settings_msg"] = (
+                                "「%s」是内置古曲，删不了；先在上面选中一首导入的曲子再点「删曲」。"
+                                % (name or "当前曲目"))
+                            beep("illegal")
+                        else:
+                            now = time.perf_counter()
+                            if now - float(S.get("music_del_pending") or 0) <= 4.0:
+                                S["music_del_pending"] = 0.0
+                                ok, msg = delete_music_file(name)
+                                S["settings_msg"] = msg
+                                if ok:
+                                    names = bgm_names()
+                                    if S["bgm"] not in names and names:
+                                        stop_bgm()
+                                        S["bgm"] = names[0]
+                                    persist_settings()
+                                    beep("select")
+                                else:
+                                    beep("illegal")
+                            else:
+                                S["music_del_pending"] = now
+                                S["settings_msg"] = (
+                                    "4 秒内再点一次「删曲」才真删「%s」。" % name)
+                                beep("select")
                     return
             return
         if ov == "instructions":
@@ -5881,6 +7144,9 @@ def main():
                 open_overlay("settings")
             elif key == "instructions":
                 open_overlay("instructions")
+            elif key == "quit":
+                # 主页「退出」：桌面关窗口，手机结束 Activity 回桌面
+                S["quit_requested"] = True
             beep("select")
             return
 
@@ -5943,53 +7209,169 @@ def main():
             return
         save_current()
 
+    def cancel_hint():
+        job = S.get("hint_job")
+        S["hint_job"] = None
+        if job is not None:
+            job.cancel()
+
     def give_hint():
-        """给玩家算一手推荐着法，并标在棋盘上"""
-        if S.get("ai_job") is not None:
-            S["message"] = "电脑还在思考，等它走完再要提示。"
+        """算一手推荐着法，标在棋盘上。
+        以前是主线程直接搜 3 层、0.9 秒：残局里常常算不到关键着，提示的棋很"傻"，
+        而且这段时间界面完全不动（手机上这时上滑必然黑屏/无响应）。
+        现在改成后台线程，深度放到 8 层、最多 2 秒，界面照常 60 帧。"""
+        job = S.get("hint_job")
+        if job is not None and not job.done:
+            S["message"] = "还在为你想这一手，稍等…"
             beep("illegal")
             return
-        if S["over"]:
+        if S.get("ai_job") is not None:
+            S["message"] = "%s还在思考，等它走完再要提示。" % ai_label()
+            beep("illegal")
+            return
+        if S["over"] or S["replay"]:
             S["message"] = "对局已结束，无法提示。"
             beep("illegal")
             return
         if S["turn"] != HUMAN_SIDE:
-            S["message"] = "等电脑走完再提示。"
+            S["message"] = "等%s走完再提示。" % ai_label()
             beep("illegal")
             return
         avoid = banned_repeats(S["board"], HUMAN_SIDE, S["rep_counts"],
                                ban_check_repeat=True)   # 提示不推荐走成长将的着法
-        move = ai_best_move(S["board"], HUMAN_SIDE, 3, budget=0.9, banned=avoid)
-        if not move:
-            S["message"] = "没有可走的棋。"
-            beep("illegal")
-            return
-        S["hint"] = move
-        S["selected"] = (move[0], move[1])
+        S["hint"] = None
         S["move_hints"] = []
-        text = move_notation(S["board"], move[0], move[1], move[2], move[3], HUMAN_SIDE)
-        S["message"] = "建议走：%s（棋盘上已用绿点标出落点）。" % text
+        # 残局里「提示的棋不对」多半是搜得太浅：以前 8 层 / 2.4 秒，穷一点的局面
+        # 连两三步的兑子都算不完。现在放后台深搜到 12 层、给到 5 秒（桌面 4 秒），
+        # 反正不占主线程，界面照常 60 帧，多出的时间全换成层数。
+        S["hint_job"] = AiJob(S["board"], HUMAN_SIDE, 12, banned=avoid,
+                              budget=5.0 if IS_ANDROID else 4.0)
+        S["hint_job"].start()
+        S["message"] = "正在为你想一手（深搜四五秒，界面不会卡住）…"
         beep("select")
 
     def offer_draw():
-        """提和：电脑按形势判断是否接受"""
+        """人类提和：电脑按形势判断是否接受。
+        以前只有「红方分值 >= -120」才接受，等于默认人类执红；
+        现在按电脑自己的处境算，它没占到明显便宜（不到一个兵的优）就答应。"""
         if S["over"]:
             S["message"] = "对局已结束。"
             beep("illegal")
             return
-        score = evaluate(S["board"])          # 正数红方好，负数黑方（电脑）好
-        if score >= -120:
+        if S["cpu_offer"]:
+            accept_offer()
+            return
+        score = evaluate(S["board"])          # 正数红方好
+        mine = score if AI_SIDE == RED else -score
+        if mine <= 120 or insufficient_material(S["board"]):
             S["over"] = True
             S["turn"] = None
-            S["message"] = "和棋 —— 电脑接受提和，握手言和。"
+            S["cpu_offer_times"] = DRAW_OFFER_MAX   # 已经和了，别再开口
+            S["message"] = "和棋 —— %s接受提和，握手言和。" % ai_label()
             S["result"] = "和棋 —— 双方协议"
             beep("select")
         else:
-            S["message"] = "电脑拒绝了提和：它觉得自己占优，接着下。"
+            S["message"] = "%s拒绝了提和：它觉得自己占优，接着下。" % ai_label()
             beep("illegal")
+
+    def offer_reason():
+        """电脑想提和的理由：判定逻辑在模块级 cpu_draw_reason 里，这里只喂当前状态"""
+        reps = max(S["rep_counts"].values()) if S["rep_counts"] else 0
+        return cpu_draw_reason(S["board"], len(S["history"]), S["quiet_halfmoves"],
+                               reps, S.get("cpu_offer_no", -99), AI_SIDE,
+                               declined=int(S.get("cpu_offer_times", 0)))
+
+    def maybe_cpu_offer():
+        """电脑走完一手后自检：该提和还是该认输。
+        必败的残局（只剩老将、对方多子）先低头求和；人类不答应，
+        再撑几个回合就主动认输——但认输弹窗也给了「继续下」，让人类亲手吃将。"""
+        if S["over"] or S["cpu_offer"] or S["replay"] or S["editing"]:
+            return
+        if S.get("cpu_given_up"):
+            return                      # 已经说过「不用你认输」，之后不再打扰
+        asked = int(S.get("cpu_offer_times", 0))
+        hopeless = cpu_hopeless(S["board"], AI_SIDE)
+        if hopeless:
+            if len(S["history"]) >= int(S.get("resign_at", 10 ** 9)):
+                S["cpu_offer"] = {"kind": "resign", "who": ai_label(), "reason": (
+                    "上一回跟你求和没谈成，我又撑了几个回合，实在没招了，认输。"
+                    "你要想亲手把将吃掉，点「继续下」就行。")}
+                S["offer_elapsed"] = max(0.0, time.perf_counter() - S["turn_start"])
+                S["message"] = ("%s认输 —— 接受，或点「继续下」自己把将吃下来。"
+                                % ai_label())
+                beep("select")
+                return
+            if (asked < DRAW_OFFER_MAX
+                    and len(S["history"]) - int(S.get("cpu_offer_no", -99))
+                    >= DRAW_OFFER_GAP * (asked + 1)):
+                S["cpu_offer"] = {"kind": "draw", "who": ai_label(),
+                                  "reason": hopeless + (
+                    "要不先和了？不答应我再撑几个回合，撑不住就认输。")}
+                S["offer_elapsed"] = max(0.0, time.perf_counter() - S["turn_start"])
+                S["message"] = ("%s提议和棋 —— 同意或继续下，看弹窗里的说明。"
+                                % ai_label())
+                beep("select")
+                return
+        reason = offer_reason()
+        if not reason:
+            return
+        if not reason.endswith(("。", "？")):
+            reason += "。"
+        # 用户要的口气：不逼人，「不答应也行，过几步再来问」。第三次是最后一次，
+        # 就别许空诺，改成「我不再提了」，免得话说出去做不到。
+        if int(S.get("cpu_offer_times", 0)) < DRAW_OFFER_MAX - 1:
+            reason += "不答应也行，过几步我再提一回。"
+        else:
+            reason += "不答应就接着下，我不再提了。"
+        S["cpu_offer"] = {"kind": "draw", "who": ai_label(), "reason": reason}
+        S["offer_elapsed"] = max(0.0, time.perf_counter() - S["turn_start"])
+        S["message"] = ("%s提议和棋 —— 同意或继续下，看弹窗里的说明。" % ai_label())
+        beep("select")
+
+    def accept_offer():
+        """同意和棋 / 接受认输"""
+        kind = (S["cpu_offer"] or {}).get("kind", "draw")
+        S["cpu_offer"] = None
+        S["over"] = True
+        S["turn"] = None
+        if kind == "resign":
+            S["result"] = "%s胜 —— %s认输" % (name_of(HUMAN_SIDE), name_of(AI_SIDE))
+            S["message"] = S["result"] + "（%s只剩老将，撑不下去了）。" % ai_label()
+            mark_entry_done(HUMAN_SIDE)
+            beep("win")
+        else:
+            S["result"] = "和棋 —— %s提议，双方同意" % ai_label()
+            S["message"] = "和棋 —— 双方握手言和，这一局到此结束。"
+            S["cpu_offer_times"] = DRAW_OFFER_MAX   # 已经和了，别再开口
+            beep("select")
+
+    def decline_offer():
+        """拒绝提和 / 不接受认输：接着下。
+        提和被拒后记下手数，间隔一次比一次长、最多问三回；必败局则几个回合后认输。"""
+        kind = (S["cpu_offer"] or {}).get("kind", "draw")
+        S["cpu_offer"] = None
+        S["cpu_offer_no"] = len(S["history"])
+        S["cpu_offer_times"] = int(S.get("cpu_offer_times", 0)) + 1
+        S["turn_start"] = time.perf_counter()      # 弹窗期间冻结的计时从这里继续
+        if kind == "resign":
+            S["cpu_given_up"] = True
+            S["message"] = "好，不用你认输 —— 接着走，把将吃掉这局才算完。"
+        elif cpu_hopeless(S["board"], AI_SIDE):
+            S["resign_at"] = len(S["history"]) + RESIGN_AFTER_DECLINE
+            S["message"] = ("好，接着下。我再撑 %d 个回合，翻不了盘就认输。"
+                            % (RESIGN_AFTER_DECLINE // 2))
+        else:
+            left = DRAW_OFFER_MAX - S["cpu_offer_times"]
+            if left <= 0:
+                S["message"] = "好，接着下。这一局我不再提和了，陪你走到终局。"
+            else:
+                S["message"] = ("好，接着下。我过几手若还觉得分不出胜负才会再提，"
+                                "这一局最多还提 %d 回。" % left)
+        beep("select")
 
     def perform_move(fr, fc, tr, tc, mover):
         """执行一步棋：保存快照、记谱、结算用时、播放音效、判断将军与胜负"""
+        cancel_hint()          # 局面变了，上一手算出来的提示不能再标在盘上
         S["undo_stack"].append({
             "board": dict(S["board"]),
             "turn": S["turn"],
@@ -6066,6 +7448,17 @@ def main():
             beep("win")
             return
 
+        # 子力不足：双方都只剩将帅士象（至多各一匹单马），再走也分不出胜负。
+        # 以前这种盘面要磨到「六十回合无吃子」才判和，用户看着就是和定了还在下。
+        if insufficient_material(board):
+            S["over"] = True
+            S["turn"] = None
+            S["result"] = "和棋 —— 双方子力不足"
+            S["message"] = ("和棋 —— 盘上只剩将帅士象（或单马），"
+                            "谁都将不死对方，按子力不足判和。")
+            beep("select")
+            return
+
         # 三次重复局面：按整个循环里谁在将军来裁决（被迫应着的一方不算长将）
         rp = repeat_cycle_verdict(S["pos_log"], key, mover, enemy,
                                   S["rep_counts"].get(key, 0))
@@ -6121,6 +7514,8 @@ def main():
     def undo():
         """悔棋：回退到玩家上一步之前（连退对手的应着）"""
         cancel_ai()
+        cancel_hint()
+        S["cpu_offer"] = None      # 悔棋等于不认这次提和，弹窗先关掉
         if not S["undo_stack"]:
             S["message"] = "当前没有可以悔的棋。"
             beep("illegal")
@@ -6168,9 +7563,26 @@ def main():
         S["selected"] = None
         beep("select")
 
+    if boot:
+        boot.finish()          # 补够最短时长 + 淡出，然后进主页
     fps = pygame.time.Clock()
     running = True
+    frame_no = 0
     while running:
+        frame_no += 1
+        if S.get("quit_requested"):
+            running = False
+            break
+        # 手机切后台再回来时偶尔会丢 Surface（表现为整屏黑），每半秒核对一次尺寸
+        if IS_ANDROID and frame_no % 30 == 0:
+            try:
+                _sz = pygame.display.get_window_size()
+            except (pygame.error, AttributeError):
+                _sz = (win_w, win_h)
+            if _sz[0] > 0 and _sz[1] > 0 and tuple(_sz) != (win_w, win_h):
+                win_w, win_h = _sz
+                draw_w, draw_h, off_x, off_y = fit_layout(win_w, win_h)
+                screen = pygame.Surface((SCREEN_W, SCREEN_H))
         # 拖动只在「对局中、轮到玩家」时有效，换屏 / 终局 / 复盘一律清掉，免得残留
         if S["drag"] is not None and (S["screen"] != "battle" or S["over"]
                                       or S["replay"] or S["editing"]
@@ -6217,6 +7629,26 @@ def main():
                 if "pos" in ev.dict:
                     ev.dict["pos"] = to_logical(ev.dict["pos"])
         for event in events:
+            # 切后台 / 回到前台：安卓的 Surface 可能已被系统回收，重建一次并立刻重画
+            _wev = getattr(pygame, "WINDOWEVENT", None)
+            if _wev is not None and event.type == _wev:
+                _wake = tuple(getattr(pygame, _n, -1) for _n in (
+                    "WINDOWEVENT_FOCUS_GAINED", "WINDOWEVENT_SHOWN",
+                    "WINDOWEVENT_RESTORED", "WINDOWEVENT_EXPOSED"))
+                if IS_ANDROID and getattr(event, "event", None) in _wake:
+                    try:
+                        _sz = pygame.display.get_window_size()
+                    except (pygame.error, AttributeError):
+                        _sz = (win_w, win_h)
+                    if _sz[0] > 0 and _sz[1] > 0 and tuple(_sz) != (win_w, win_h):
+                        win_w, win_h = _sz
+                        draw_w, draw_h, off_x, off_y = fit_layout(win_w, win_h)
+                        screen = pygame.Surface((SCREEN_W, SCREEN_H))
+                    try:
+                        pygame.display.flip()
+                    except pygame.error:
+                        pass
+                continue
             if (IS_ANDROID and event.type == pygame.KEYDOWN
                     and event.key == getattr(pygame, "K_AC_BACK", -999)):
                 # 安卓物理返回键：与关窗口同一套退让逻辑（浮层先关、对局先回主页、主页才退出）
@@ -6347,6 +7779,14 @@ def main():
                 continue
 
             if event.type == pygame.KEYDOWN:
+                # 提和弹窗是模态：期间只认 Esc（继续下）和回车（同意），
+                # 别的快捷键一律不理，免得一边看说明一边把棋走出来
+                if S["cpu_offer"] and not S["naming"]:
+                    if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        accept_offer()
+                    elif event.key == pygame.K_ESCAPE:
+                        decline_offer()
+                    continue
                 if S["naming"]:
                     if event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                         close_naming(True)
@@ -6362,7 +7802,9 @@ def main():
                     continue
 
                 if event.key == pygame.K_ESCAPE:
-                    if S["lib_open"]:
+                    if S["cpu_offer"]:
+                        decline_offer()      # 弹窗开着：Esc 等于「继续下」
+                    elif S["lib_open"]:
                         S["lib_open"] = False
                         S["lib_focus"] = False
                         S["lib_query"] = ""
@@ -6489,6 +7931,17 @@ def main():
             if event.type != pygame.MOUSEBUTTONDOWN:
                 continue
             pos = event.pos
+            # 电脑提和弹窗最优先：同意 / 继续下，两个按钮都好按；别处点了不算
+            if S["cpu_offer"]:
+                if event.button == 1:
+                    for rect, kind in draw_offer_rects():
+                        if rect.collidepoint(pos):
+                            if kind == "accept":
+                                accept_offer()
+                            else:
+                                decline_offer()
+                            break
+                continue
             if S["naming"]:
                 # 改名浮层里可点「先行」切换红先 / 黑先
                 if (event.button == 1 and S.get("naming_mode") == "rename"
@@ -6505,7 +7958,7 @@ def main():
                         S["lib_query"], S.get("lib_pieces", "全部"),
                         S.get("lib_level", "全部"))
                     sfield = library_search_rect(panel)
-                    ex_rect, im_rect = library_io_rects(panel)
+                    ex_rect, im_rect, rs_rect = library_io_rects(panel)
                     if sfield.collidepoint(pos):
                         S["lib_focus"] = True
                         try:
@@ -6520,6 +7973,27 @@ def main():
                         continue
                     if im_rect.collidepoint(pos):
                         import_library()
+                        continue
+                    if rs_rect.collidepoint(pos):
+                        # 恢复是有破坏性的动作：先提示，4 秒内再点一次才真覆盖
+                        now_t = time.perf_counter()
+                        if now_t - float(S.get("lib_restore_t", -99)) <= 4.0:
+                            S["lib_restore_t"] = -99
+                            entries, msg = restore_library_backup()
+                            S["edit_msg"] = msg
+                            if entries:
+                                S["entries"] = entries
+                                clear_deleted_keys()
+                                S["lib_off"] = 0
+                                beep("select")
+                            else:
+                                beep("illegal")
+                        else:
+                            S["lib_restore_t"] = now_t
+                            S["edit_msg"] = (
+                                "要用最近一份备份覆盖当前库：4 秒内再点一次「恢复」即可。"
+                                "当前库会先另存一份，恢复错了还能再退回来。")
+                            beep("select")
                         continue
                     if library_piece_rect(panel).collidepoint(pos):
                         cur = S.get("lib_pieces", "全部")
@@ -6592,17 +8066,12 @@ def main():
                                     beep("select")
                                     done = True
                                     break
-                                if library_rename_rect(rect).collidepoint(pos):
-                                    S["lib_del_pending"] = None
-                                    open_naming("rename", idx)
-                                    S["edit_msg"] = "改名：直接输入新名字，回车确认。"
-                                    beep("select")
-                                    done = True
-                                    break
                                 if library_delete_rect(rect).collidepoint(pos):
                                     name = S["entries"][idx].get("name", "未命名")
                                     # 删除需二次确认：第一次点亮「确认」，再次点击才删除
                                     if S["lib_del_pending"] == idx:
+                                        gone = S["entries"][idx]
+                                        remember_deleted(gone)   # 记一笔，升级补库时不再加回来
                                         del S["entries"][idx]
                                         try:
                                             save_library(S["entries"])
@@ -6641,6 +8110,18 @@ def main():
                         S["message"] = "难度已切换为「%s」（AI 最多搜 %d 层）。" % (
                             kind[1], DIFFICULTY_DEPTH[kind[1]])
                         beep("select")
+                    elif kind[0] == "diff_cycle":
+                        names = [lab for lab, _d in DIFFICULTY_LEVELS]
+                        try:
+                            idx = names.index(S["difficulty"])
+                        except ValueError:
+                            idx = 0
+                        S["difficulty"] = names[(idx + 1) % len(names)]
+                        S["message"] = "难度已切换为「%s」（再点一下换下一档）。" % (
+                            S["difficulty"],)
+                        beep("select")
+                    elif kind[0] == "music":
+                        toggle_bgm()
                     elif kind[0] == "sound":
                         S["sound_on"] = not S["sound_on"]
                         beep("select")
@@ -6807,6 +8288,11 @@ def main():
                         beep("select" if ok else "illegal")
                     elif key == "restart":
                         reset_position(S["position"])
+                    elif key == "home":
+                        # 手机没有 Esc：底部「主页」按钮替代它，摆棋先收摊再回主页
+                        if S["editing"]:
+                            leave_edit(True)
+                        esc_back_home()
                     handled = True
                     break
                 if handled:
@@ -6875,9 +8361,32 @@ def main():
                 S["replay_index"] = min(total, S["replay_index"] + 1)
                 S["replay_last"] = time.perf_counter()
 
+        # ---- 提示：后台线程算，算完再标；主循环期间照常画界面，不会假死 ----
+        hjob = S.get("hint_job")
+        if hjob is not None:
+            stale = (S["screen"] != "battle" or S["over"] or S["replay"]
+                     or S["editing"] or S["turn"] != HUMAN_SIDE)
+            if stale:
+                cancel_hint()
+            elif hjob.done:
+                S["hint_job"] = None
+                move = hjob.result
+                if hjob.error is not None or not move:
+                    S["message"] = "这一手没算出好着法，换个局面再试试。"
+                    beep("illegal")
+                else:
+                    S["hint"] = move
+                    S["selected"] = (move[0], move[1])
+                    S["move_hints"] = []
+                    text = move_notation(S["board"], move[0], move[1],
+                                         move[2], move[3], HUMAN_SIDE)
+                    S["message"] = "建议走：%s（棋盘上已用绿点标出落点）。" % text
+                    beep("select")
+
         # ---- AI 走棋：后台线程算，主循环继续以 60 帧绘制（箭头、计时不停）----
         ai_turn = (S["screen"] == "battle" and not S["editing"] and not S["over"]
-                   and not S["replay"] and S["turn"] == AI_SIDE)
+                   and not S["replay"] and not S["cpu_offer"]
+                   and S["turn"] == AI_SIDE)
         if S.get("ai_job") is not None and not ai_turn:
             cancel_ai()                     # 局面被换掉 / 已终局：丢弃这次计算
         if ai_turn:
@@ -6895,7 +8404,7 @@ def main():
                 S["ai_job"] = None
                 move = job.result
                 if job.error is not None:
-                    S["message"] = "电脑思考出错（%s），本局已重开。" % job.error
+                    S["message"] = "%s思考出错（%s），本局已重开。" % (ai_label(), job.error)
                     beep("illegal")
                     reset_position(S["position"])
                 elif move is None:
@@ -6914,9 +8423,14 @@ def main():
                         move = guarded
                     perform_move(move[0], move[1], move[2], move[3], AI_SIDE)
                     if not S["over"] and _last_depth >= 2:
-                        S["message"] += "（电脑算到第 %d 层）" % _last_depth
+                        S["message"] += "（%s算到第 %d 层）" % (ai_label(), _last_depth)
+                    if not S["over"]:
+                        maybe_cpu_offer()     # 电脑觉得和定了就主动开口
 
         # ---- 渲染 ----
+        # 提和弹窗开着时冻结本手计时：用户在看说明、做决定，不该扣他的时间
+        if S["cpu_offer"]:
+            S["turn_start"] = time.perf_counter() - S["offer_elapsed"]
         bgm_tick()
         if S["screen"] == "home":
             try:
@@ -6940,7 +8454,8 @@ def main():
         hint_list = [S["hint"]] if S["hint"] else list(S["move_hints"])
         if S["editing"]:
             draw_edit_scene(screen, S["board"], S["edit_piece"], S["edit_msg"],
-                            S["difficulty"], S["sound_on"], S["move_limit"])
+                            S["difficulty"], S["sound_on"], S["move_limit"],
+                            music_on=S["bgm_on"])
         elif S["replay"]:
             total = len(S["history"])
             display_board = rebuild_board(S["replay_index"])
@@ -6952,10 +8467,11 @@ def main():
             draw_scene(screen, display_board, None, S["turn"], S["remain"],
                        S["turn_start"], S["counts"], S["message"], True,
                        S["difficulty"], S["sound_on"], last_move=last,
-                       caption="复盘模式：第 %d / %d 手（←/→ 步进，空格自动，Esc 退出）"
-                               % (S["replay_index"], total),
+                       caption=(("复盘模式：第 %d / %d 手" if IS_ANDROID else
+                                 "复盘模式：第 %d / %d 手（←/→ 步进，空格自动，Esc 退出）")
+                                % (S["replay_index"], total)),
                        replay_info=(S["replay_index"], total, S["replay_auto"]),
-                       move_limit=S["move_limit"])
+                       music_on=S["bgm_on"], move_limit=S["move_limit"])
         else:
             draw_scene(screen, S["board"], S["selected"], S["turn"], S["remain"],
                        S["turn_start"], S["counts"], S["message"], S["over"],
@@ -6972,6 +8488,8 @@ def main():
                                  io_msg=S.get("edit_msg", ""),
                                  pieces=S.get("lib_pieces", "全部"),
                                  level=S.get("lib_level", "全部"))
+        if S["cpu_offer"]:
+            draw_draw_offer_overlay(screen, S["cpu_offer"])
         if S["naming"]:
             mode = S.get("naming_mode", "save")
             draw_naming_overlay(screen, S["name_buf"],
@@ -6982,6 +8500,7 @@ def main():
         present()
         fps.tick(60)
 
+    finish_app()
     pygame.quit()
     sys.exit()
 
