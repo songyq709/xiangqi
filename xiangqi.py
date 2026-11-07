@@ -261,19 +261,30 @@ MARGIN = 46
 
 CONTROL_H = 40          # 顶部设置栏（难度 / 摆棋 / 残局库 / 音效）
 PANEL_TOP = 56          # 黑方计时面板
-PANEL_BOTTOM = 140      # 红方计时面板 + 提示文字 / 摆棋面板 + 底部按钮栏
+# v2.15：底部预留从 140 加到 182。原来的 140 只够红方计时面板（58）加两行说明，
+# 底栏被排到 y=832、高 26 —— 画布只有 838 高，按钮实际有 20 像素落在屏幕外，
+# 桌面上看起来就是「下方按键被切掉半截」。现在面板、说明、底栏各自占位，不再叠。
+PANEL_BOTTOM = 156      # 红方面板 58 + 说明两行 36 + 底栏 34 + 上下留白
 
 BOARD_PX_W = MARGIN * 2 + CELL * (BOARD_COLS - 1)      # 572
 BOARD_PX_H = MARGIN * 2 + CELL * (BOARD_ROWS - 1)      # 632
 SCREEN_W = BOARD_PX_W
 BOARD_ORIGIN_Y = CONTROL_H + PANEL_TOP                 # 棋盘区域起始 y
-SCREEN_H = CONTROL_H + PANEL_TOP + BOARD_PX_H + PANEL_BOTTOM   # 838
+SCREEN_H = CONTROL_H + PANEL_TOP + BOARD_PX_H + PANEL_BOTTOM   # 桌面 880（手机按比例）
+DESK_SCREEN_H = SCREEN_H        # 桌面稿的画布高度，切手机布局时不动它
+DESK_BOTTOM_H = 34              # 桌面底栏按钮高度（原来 26，字被挤、点也难点）
+# 桌面窗口可自由拉伸，但不要小到看不清：约 0.73 倍逻辑尺寸
+MIN_WIN_W, MIN_WIN_H = 420, 646
+# 手机画布（572 宽）的高度区间：低于 936 控件压到最小也会互相压，
+# 高于 1600 再放就会把棋盘拉得七零八落，两头都夹住
+MIN_BIG_H, MAX_BIG_H = 936, 1600
 
 # 摆棋面板（替代底部计时面板显示）
 EDIT_TOP = BOARD_ORIGIN_Y + BOARD_PX_H + 2
 EDIT_BAR1_Y = EDIT_TOP + 4        # 红方全盘棋子行（黑方在其下 32px）
 EDIT_BAR2_Y = EDIT_TOP + 68       # 操作按钮
 EDIT_MSG_Y = EDIT_BAR2_Y + 34     # 编辑提示文字
+EDIT_BTN_H = 30                   # 操作按钮高度（手机版在 refresh_edit_layout 里放大）
 
 # 计时设置（分钟，可用环境变量 CHESS_TIME_MIN 覆盖）
 try:
@@ -512,7 +523,7 @@ def load_font(size):
 
 
 # ---------------------------- 版本 / 创作者 / 设置项 ----------------------------
-VERSION = "2.13"
+VERSION = "2.16"
 APP_NAME = "中国象棋-智算单机版"
 CREATOR = "songyq"     # 主页右下角标注；
 TIME_OPTIONS = [5, 10, 20, 30, 60]    # 对战时间（分钟）
@@ -3202,9 +3213,27 @@ _LIB_SEED_B64 = (
 LIB_PATH = os.path.join(_BASE_DIR, "残局库.json")
 LIB_DELETED_PATH = os.path.join(_BASE_DIR, "残局库_已删.json")   # 用户删掉的局，防升级时被补回来
 SETTINGS_PATH = os.path.join(_BASE_DIR, "象棋设置.json")
-LIB_PAGE_SIZE = 20           # 残局库一屏可见 20 行（尾部同样按 20 行显示）
+LIB_PAGE_SIZE = 20           # 残局库一屏可见行数（桌面 20 行，手机按 10 行算）
 LIB_ROW_H = 30               # 行高
 LIB_ROW_STEP = 33            # 行距
+# v2.14：手机版残局库只排 10 行，行高翻倍、字放大，行尾的 ★ / × 也放大到
+# 手指点得准的尺寸；宁可一屏少看几行，也不让拇指在 30px 的行里挑。
+LIB_ROW_H_BIG = 58
+LIB_ROW_STEP_BIG = 66
+LIB_SCROLL_W = 8             # 桌面滚动条宽度
+LIB_SCROLL_W_BIG = 22        # 手机滚动条：默认就粗，拇指按上去就能拖
+
+
+def lib_row_h():
+    return LIB_ROW_H_BIG if UI_BIG else LIB_ROW_H
+
+
+def lib_row_step():
+    return LIB_ROW_STEP_BIG if UI_BIG else LIB_ROW_STEP
+
+
+def lib_scroll_w():
+    return LIB_SCROLL_W_BIG if UI_BIG else LIB_SCROLL_W
 
 # 残局库头 / 底部尺寸。手机版把「导出 / 导入 / 恢复 / 搜索」和分类标签都放大到
 # 40 逻辑像素（1080 屏上约 75 物理像素），原来 22 / 20 的高度手指根本点不准。
@@ -3266,6 +3295,44 @@ PALETTE_ROWS = (EDIT_BAR1_Y, EDIT_BAR1_Y + 32)
 PALETTE_X0 = 26
 PALETTE_STEP = 32
 PALETTE_SLOT = (30, 28)
+
+
+def refresh_edit_layout():
+    """摆棋面板随画布高度重排（v2.14）。
+
+    以前 EDIT_TOP / EDIT_BAR1_Y 都是导入时按 838 高算死的常量，手机长屏上棋盘
+    整体下移，底板和按钮还留在旧位置，正好压在棋盘最后两行和底边上——这就是
+    「摆棋界面压字、字小」的来源。现在按 BOARD_ORIGIN_Y 现算，手机另给一套
+    更大的格位、按钮和字号（16 枚仍要挤在一行里，所以横向步长不动）。"""
+    global EDIT_TOP, EDIT_BAR1_Y, EDIT_BAR2_Y, EDIT_MSG_Y, EDIT_BTN_H
+    global PALETTE_ROWS, PALETTE_X0, PALETTE_STEP, PALETTE_SLOT
+    EDIT_TOP = BOARD_ORIGIN_Y + BOARD_PX_H + (8 if UI_BIG else 2)
+    if UI_BIG:
+        PALETTE_STEP = 33                    # 16 枚要挤一行，横向步长不能再大
+        PALETTE_X0 = 24
+        # 竖向按剩余空间分三档：长屏再放大一号，矮屏（900 高那种）压到最紧，
+        # 保证提示文字一定落在屏幕里，不会被裁掉。
+        avail = SCREEN_H - EDIT_TOP
+        if avail >= 300:
+            row_h, EDIT_BTN_H = 44, 64
+        elif avail >= 230:
+            row_h, EDIT_BTN_H = 36, 54
+        else:
+            row_h, EDIT_BTN_H = 28, 36
+        PALETTE_SLOT = (31, row_h)
+        EDIT_BAR1_Y = EDIT_TOP + 6
+        PALETTE_ROWS = (EDIT_BAR1_Y, EDIT_BAR1_Y + row_h + 6)
+        EDIT_BAR2_Y = EDIT_BAR1_Y + 2 * (row_h + 6) + 4
+        EDIT_MSG_Y = EDIT_BAR2_Y + EDIT_BTN_H + 4
+    else:
+        PALETTE_SLOT = (30, 28)
+        PALETTE_STEP = 32
+        PALETTE_X0 = 26
+        EDIT_BAR1_Y = EDIT_TOP + 4
+        PALETTE_ROWS = (EDIT_BAR1_Y, EDIT_BAR1_Y + 32)
+        EDIT_BAR2_Y = EDIT_TOP + 68
+        EDIT_BTN_H = 30
+        EDIT_MSG_Y = EDIT_BAR2_Y + 34
 
 EDIT_ACTIONS = [("erase", "擦除", 62), ("clear", "清空", 62), ("name", "命名", 62),
                 ("save", "保存", 62), ("load", "载入", 62), ("done", "完成", 70),
@@ -4232,7 +4299,17 @@ def palette_remaining(board, piece):
 
 
 def edit_action_rects():
-    rects, x = [], 10
+    """摆棋操作按钮。手机版：七个键均分整幅宽度、高 54，拇指点得准。"""
+    rects = []
+    if UI_BIG:
+        gap = 6
+        n = len(EDIT_ACTIONS)
+        w = (SCREEN_W - 20 - gap * (n - 1)) // n
+        for i, (key, label, _w) in enumerate(EDIT_ACTIONS):
+            rects.append((pygame.Rect(10 + i * (w + gap), EDIT_BAR2_Y, w, EDIT_BTN_H),
+                          (key, label)))
+        return rects
+    x = 10
     for key, label, width in EDIT_ACTIONS:
         rects.append((pygame.Rect(x, EDIT_BAR2_Y, width, 30), (key, label)))
         x += width + 8
@@ -4242,7 +4319,7 @@ def edit_action_rects():
 def library_panel(visible=LIB_PAGE_SIZE):
     """残局库浮层：最多一屏 LIB_PAGE_SIZE 行；条目少时面板跟着收短，不留大片空白"""
     visible = max(1, min(int(visible or 1), LIB_PAGE_SIZE))
-    h = lib_head_h() + visible * LIB_ROW_STEP + lib_foot_h()
+    h = lib_head_h() + visible * lib_row_step() + lib_foot_h()
     # 条目少时面板跟着收短，并垂直居中——否则短面板贴在最上面，下面空一大片
     top = max(40, (SCREEN_H - h) // 2)
     return pygame.Rect(40, top, SCREEN_W - 80, h)
@@ -4460,22 +4537,27 @@ def library_layout(entries, off=0, category="全部", query="", pieces="全部",
     panel = library_panel(len(page_idxs))
 
     head = lib_head_h()
+    res_r = 60 if UI_BIG else 40              # 行尾留给删除按钮的宽度
+    shr = (lib_scroll_w() + 8) if UI_BIG else 0
     rows, y = [], panel.y + head
     for full_i in page_idxs:
-        rows.append((pygame.Rect(panel.x + 12, y, panel.w - 24 - 40, LIB_ROW_H), full_i))
-        y += LIB_ROW_STEP
+        rows.append((pygame.Rect(panel.x + 12, y, panel.w - 24 - res_r - shr,
+                                 lib_row_h()), full_i))
+        y += lib_row_step()
 
     scroll = None
     if total > LIB_PAGE_SIZE:
-        track_x = panel.right - 12
+        sw = lib_scroll_w()
+        track_x = panel.right - 8 - sw
         track_top = panel.y + head
-        track_bottom = panel.y + head + LIB_PAGE_SIZE * LIB_ROW_STEP - 4
+        track_bottom = panel.y + head + LIB_PAGE_SIZE * lib_row_step() - 6
         track_h = max(1, track_bottom - track_top)
-        thumb_h = max(26, int(track_h * LIB_PAGE_SIZE / max(1, total)))
+        thumb_h = max(30 if UI_BIG else 26,
+                      int(track_h * LIB_PAGE_SIZE / max(1, total)))
         ratio = off / max(1, library_max_off(total))
         ty = track_top + (track_h - thumb_h) * ratio
-        scroll = (pygame.Rect(track_x, track_top, 8, track_h),
-                  pygame.Rect(track_x, ty, 8, thumb_h))
+        scroll = (pygame.Rect(track_x, track_top, sw, track_h),
+                  pygame.Rect(track_x, ty, sw, thumb_h))
     return panel, rows, off, total, scroll
 
 
@@ -4485,6 +4567,21 @@ def library_scroll_off(scroll, total, mouse_y, grab):
     y = mouse_y - grab
     ratio = (y - track.y) / max(1, (track.h - thumb.h))
     return max(0, min(library_max_off(total), int(round(ratio * library_max_off(total)))))
+
+
+def lib_drag_off(tap, y, total):
+    """在列表上拖动：向下拉一行，起始序号减一行（内容跟着手指往上走）"""
+    if not tap:
+        return 0
+    moved = int(round((y - tap.get("y", y)) / float(lib_row_step())))
+    return max(0, min(library_max_off(total), int(tap.get("off", 0)) - moved))
+
+
+def lib_tap_loads(tap, entries_len):
+    """抬手时才算数：没拖动、且序号还在范围内，才打开这一局"""
+    if not tap or tap.get("moved"):
+        return False
+    return 0 <= int(tap.get("idx", -1)) < entries_len
 
 
 def library_search_rect(panel):
@@ -4513,7 +4610,9 @@ def library_io_rects(panel):
 
 
 def library_star_rect(row):
-    """行尾的收藏按钮（做成方块按钮，好点也好认）"""
+    """行尾的收藏按钮（做成方块按钮，好点也好认）。手机版放大到 48×46。"""
+    if UI_BIG:
+        return pygame.Rect(row.right - 52, row.y + 6, 46, row.h - 12)
     return pygame.Rect(row.right - 36, row.y + 2, 32, row.h - 4)
 
 
@@ -4533,6 +4632,8 @@ def library_row_columns(row):
 
 
 def library_delete_rect(row):
+    if UI_BIG:
+        return pygame.Rect(row.right + 8, row.y + 6, 44, row.h - 12)
     return pygame.Rect(row.right + 6, row.y + 2, 30, row.h - 4)
 
 
@@ -4601,11 +4702,11 @@ def player_panel_rect(side):
     return pygame.Rect(14, RED_PANEL_Y, SCREEN_W - 28, RED_PANEL_H)
 
 
-BOTTOM_Y = 832
-BOTTOM_H = 26
+BOTTOM_H = DESK_BOTTOM_H
+BOTTOM_Y = SCREEN_H - 8 - BOTTOM_H     # 838：底栏完整落在画布内，下沿留 8
 RED_PANEL_H = 58          # 红方（下方）计时面板高度：手机版压到 46 好腾出两排按钮
-BOTTOM_ROW1_Y = 832       # 手机版第一排按钮的 y（桌面版只有一排，沿用 BOTTOM_Y）
-BOTTOM_ROW_H = 26
+BOTTOM_ROW1_Y = BOTTOM_Y  # 手机版第一排按钮的 y（桌面版只有一排，沿用 BOTTOM_Y）
+BOTTOM_ROW_H = DESK_BOTTOM_H
 BLACK_PANEL_H = 50        # 黑方（上方）计时面板高度：手机版随屏幕拉高
 RED_PANEL_Y = BOARD_ORIGIN_Y + BOARD_PX_H + 2
 
@@ -4637,12 +4738,21 @@ def refresh_overlays():
 
     # 残局库：长屏一屏多放几行，面板上下居中，底下的「上一页 / 下一页」跟着下去
     def _lib_h(n):
-        return lib_head_h() + n * LIB_ROW_STEP + lib_foot_h()
-    n = 20
-    while n < 42 and _lib_h(n + 1) <= SCREEN_H - 100:
-        n += 1
+        return lib_head_h() + n * lib_row_step() + lib_foot_h()
+    if UI_BIG:
+        # 手机一屏最多 10 行：行高 58、字放大，拇指才好点。屏幕更高也不再加行，
+        # 多出来的高度留给面板居中，宁可留白也不要挤成一片小字。
+        limit, cap = SCREEN_H - 48, 10
+        n = 1
+        while n < cap and _lib_h(n + 1) <= limit:
+            n += 1
+    else:
+        n = 20
+        while n < 42 and _lib_h(n + 1) <= SCREEN_H - 100:
+            n += 1
     LIB_PAGE_SIZE = n
     LIB_PANEL_TOP = max(40, (SCREEN_H - _lib_h(n)) // 2)
+    refresh_edit_layout()
 
 
 def set_ui_mode(big, win_w=None, win_h=None):
@@ -4658,34 +4768,85 @@ def set_ui_mode(big, win_w=None, win_h=None):
     UI_BIG = bool(big)
     if not UI_BIG:
         CONTROL_H = 40
-        SCREEN_H = 838
+        SCREEN_H = DESK_SCREEN_H
         BOARD_ORIGIN_Y = CONTROL_H + PANEL_TOP
         BLACK_PANEL_H = 50
         RED_PANEL_H = 58
         RED_PANEL_Y = BOARD_ORIGIN_Y + BOARD_PX_H + 2
-        BOTTOM_Y, BOTTOM_H = 832, 26
-        BOTTOM_ROW1_Y, BOTTOM_ROW_H = 832, 26
+        # v2.15：底栏贴着画布底边放，不再固定 832 —— 那个值让按钮下沿到了 858，
+        # 画布只有 838 高，按钮被切掉 20 像素。同时按高度分出一行给说明文字。
+        BOTTOM_HEIGHT = DESK_BOTTOM_H
+        BOTTOM_Y, BOTTOM_H = SCREEN_H - 8 - BOTTOM_HEIGHT, BOTTOM_HEIGHT
+        BOTTOM_ROW1_Y, BOTTOM_ROW_H = BOTTOM_Y, BOTTOM_H
         refresh_overlays()
         return
 
     w = max(1, int(win_w or 1080))
     h = max(1, int(win_h or 1920))
-    # 572 宽、高度按真实宽高比拉满；夹在 900～1400 之间，避免奇形屏幕把布局拉散
+    # 572 宽、高度按真实宽高比拉满；夹在 936～1600 之间。
+    # 936 是「控件压到最小也不重叠」的底线：16:9 手机是 1017，4:3 平板只有 763，
+    # 上平板就落在 936；1600 是 22:9 长屏的上限，再长上下留一点木色，不把布局拉散。
     full_h = int(round(SCREEN_W * h / float(w)))
-    SCREEN_H = max(900, min(full_h, 1400))
+    SCREEN_H = max(MIN_BIG_H, min(full_h, MAX_BIG_H))
     extra = SCREEN_H - 838
 
-    CONTROL_H = 46 + int(extra * 0.030)
-    black_h = 54 + int(extra * 0.060)
-    btn_h = min(92, 50 + int(extra * 0.125))
-    hint_h = 26 + int(extra * 0.030)
-    red_h = 58 + int(extra * 0.080)
+    # 先按屏幕高度给一档「理想尺寸」（长屏按钮更大、面板更高）
+    control_want = 46 + int(extra * 0.030)
+    black_want = 54 + int(extra * 0.060)
+    btn_want = min(92, 50 + int(extra * 0.125))
+    hint_want = 26 + int(extra * 0.030)
+    red_want = 58 + int(extra * 0.080)
 
-    row2_y = SCREEN_H - 12 - btn_h
-    row1_y = row2_y - 8 - btn_h
-    red_y = row1_y - 4 - hint_h - red_h
-    top = CONTROL_H + 6 + black_h + 8
-    slack = red_y - 8 - BOARD_PX_H - top
+    # 再按可用高度收一遍。以前直接摆，16:9（逻辑 572×1017）和 4:3 平板放不下，
+    # 红方计时面板就压到棋盘最后一排上（1080×1920 压 15 像素，最底排棋子被盖住）。
+    # 现在把所有弹性尺寸按同一系数 c 从「理想」压到「最小」，二分出放得下的最大 c，
+    # 矮屏整体收一点、谁也不压谁；长屏 c=1，照旧是放大版。
+    gap_top, gap_board, gap_hint, gap_row, gap_bottom = 6, 8, 4, 8, 12
+    min_control, min_black, min_red, min_hint, min_btn = 44, 46, 50, 20, 46
+
+    def height_for(c):
+        return (min_control + (control_want - min_control) * c + gap_top
+                + min_black + (black_want - min_black) * c + gap_board
+                + BOARD_PX_H + gap_board
+                + min_red + (red_want - min_red) * c + gap_hint
+                + min_hint + (hint_want - min_hint) * c
+                + 2 * (min_btn + (btn_want - min_btn) * c) + gap_row + gap_bottom)
+
+    fit = 1.0
+    if height_for(1.0) > SCREEN_H - 2:
+        lo, hi = 0.0, 1.0
+        for _ in range(18):                 # 二分 18 次，误差远小于 1 像素
+            mid = (lo + hi) / 2.0
+            if height_for(mid) <= SCREEN_H - 2:
+                lo = mid
+            else:
+                hi = mid
+        fit = lo
+
+    def _sized(lo_v, want_v):
+        return int(round(lo_v + (want_v - lo_v) * fit))
+
+    CONTROL_H = _sized(min_control, control_want)
+    black_h = _sized(min_black, black_want)
+    btn_h = _sized(min_btn, btn_want)
+    hint_h = _sized(min_hint, hint_want)
+    red_h = _sized(min_red, red_want)
+
+    row2_y = SCREEN_H - gap_bottom - btn_h
+    row1_y = row2_y - gap_row - btn_h
+    red_y = row1_y - gap_hint - hint_h - red_h
+    top = CONTROL_H + gap_top + black_h + gap_board
+    slack = red_y - gap_board - BOARD_PX_H - top
+    if slack < 0:
+        # 四舍五入留下的几像素：先让说明行，再让红方面板，保证棋盘绝不被压
+        cut = min(-slack, max(0, hint_h - 16))
+        hint_h -= cut
+        slack += cut
+        if slack < 0:
+            cut = min(-slack, max(0, red_h - 46))
+            red_h -= cut
+            slack += cut
+        red_y = row1_y - gap_hint - hint_h - red_h
 
     BLACK_PANEL_H = black_h
     BOARD_ORIGIN_Y = top + max(0, slack // 2)
@@ -4777,9 +4938,14 @@ def draw_bottom_buttons(screen, game_over=False, music_on=True):
     if UI_BIG:
         bfont = load_font(max(15, min(22, BOTTOM_ROW_H // 4)))
         sfont = load_font(max(13, min(18, BOTTOM_ROW_H // 5)))
+        # 「复盘」两字再提一档：手机上一排四个键时它显得最瘦小，拇指一看不见
+        big_font = load_font(max(18, min(26, BOTTOM_ROW_H // 3)))
     else:
-        bfont = load_font(13)
-        sfont = load_font(12)
+        # v2.15：桌面底栏从 26 加到 34，字号跟着从 13 提到 15；
+        # 长标签（如「返回」）仍降到 13，保证不出框。
+        bfont = load_font(15)
+        sfont = load_font(13)
+        big_font = bfont
     for rect, key in bottom_button_rects():
         enabled = not (game_over and key in ("hint", "undo"))
         if key == "home":
@@ -4790,7 +4956,8 @@ def draw_bottom_buttons(screen, game_over=False, music_on=True):
                          C((196, 186, 170)) if enabled else C((170, 164, 154)),
                          radius=8)
         col = TH["text"] if enabled else C((150, 144, 132))
-        surf = bfont.render(label, True, col)
+        use = big_font if key == "replay" else bfont
+        surf = use.render(label, True, col)
         if surf.get_width() > rect.w - 8:        # 「返回主菜单」这类长标签降一档字号
             surf = sfont.render(label, True, col)
         screen.blit(surf, (rect.centerx - surf.get_width() // 2,
@@ -4798,15 +4965,19 @@ def draw_bottom_buttons(screen, game_over=False, music_on=True):
 
 
 def replay_button_rects():
-    y = BOTTOM_Y
+    """复盘模式底部四个键。手机版跟着加高到与对战底栏同高，字也放大。"""
     gap = 8
     w = (SCREEN_W - 20 - gap * 3) // 4
+    if UI_BIG:
+        return [(pygame.Rect(10 + i * (w + gap), BOTTOM_ROW1_Y, w, BOTTOM_ROW_H), key)
+                for i, key in enumerate(("prev", "next", "auto", "quit"))]
+    y = BOTTOM_Y
     return [(pygame.Rect(10 + i * (w + gap), y, w, BOTTOM_H), key)
             for i, key in enumerate(("prev", "next", "auto", "quit"))]
 
 
 def draw_replay_controls(screen, index, total, auto):
-    bfont = load_font(14)
+    bfont = load_font(max(18, min(26, BOTTOM_ROW_H // 3)) if UI_BIG else 14)
     labels = {"prev": "上一手", "next": "下一手",
               "auto": "自动" if not auto else "暂停", "quit": "退出复盘"}
     for rect, key in replay_button_rects():
@@ -4824,16 +4995,36 @@ def draw_replay_controls(screen, index, total, auto):
 
 
 def naming_panel_rect(mode="save"):
-    """命名浮层：改名模式多一行「先行方」与条目详情，面板加高"""
+    """命名浮层：改名模式多一行「先行方」与条目详情，面板加高。
+
+    v2.14：底部固定放「保存 / 返回」两个按钮。原来只能回车确认、Esc 取消，
+    手机上既没有 Esc 也不会弹键盘，点了「保存」就退不回来。"""
     if mode == "rename":
-        return pygame.Rect(50, 232, SCREEN_W - 100, 196)
-    return pygame.Rect(50, 250, SCREEN_W - 100, 156)
+        h = 300 if UI_BIG else 230
+    else:
+        h = 250 if UI_BIG else 190
+    top = max(40, (SCREEN_H - h) // 2)
+    if UI_BIG:
+        return pygame.Rect(36, top, SCREEN_W - 72, h)
+    return pygame.Rect(50, top, SCREEN_W - 100, h)
+
+
+def naming_button_rects(mode="save"):
+    """命名浮层的两个按钮：(确认, 返回)。手机上放大到 150×56。"""
+    p = naming_panel_rect(mode)
+    h, w = (56, 150) if UI_BIG else (32, 104)
+    y = p.bottom - 14 - h
+    ok = pygame.Rect(p.right - 16 - w, y, w, h)
+    cancel = pygame.Rect(ok.x - 12 - w, y, w, h)
+    return ok, cancel
 
 
 def naming_turn_rect(panel=None):
     """改名浮层里的「先行方」开关（红先 / 黑先）"""
     p = panel or naming_panel_rect("rename")
-    return pygame.Rect(p.x + 16, p.y + 96, 108, 28)
+    if UI_BIG:
+        return pygame.Rect(p.x + 16, p.y + 108, 150, 44)
+    return pygame.Rect(p.x + 16, p.y + 88, 108, 28)
 
 
 def draw_edit_scene(screen, board, edit_piece, message, difficulty, sound_on,
@@ -4843,34 +5034,36 @@ def draw_edit_scene(screen, board, edit_piece, message, difficulty, sound_on,
     draw_control_bar(screen, difficulty, sound_on, True, move_limit,
                      music_on=music_on)
 
-    # 全盘棋子底板：每方 16 枚，摆一枚少一枚
-    font = load_font(15)
-    lab = load_font(12)
+    # 全盘棋子底板：每方 16 枚，摆一枚少一枚。手机版格位、棋子、字都放大
+    font = load_font(17 if UI_BIG else 15)
+    lab = load_font(14 if UI_BIG else 12)
+    r_out = min(15, PALETTE_SLOT[1] // 2) if UI_BIG else 13
+    r_in = max(10, r_out - 2)
     for row, (color, label) in enumerate(((RED, "红"), (BLACK, "黑"))):
         tag = lab.render(label, True, C((176, 44, 44)) if color == RED else C((40, 40, 46)))
-        screen.blit(tag, (8, PALETTE_ROWS[row] + 7))
+        screen.blit(tag, (4 if UI_BIG else 8, PALETTE_ROWS[row] + (8 if UI_BIG else 7)))
     marked = False
     slots = palette_rects(board)
     for row in (0, 1):
         if not any(avail for r, _p, avail in slots if r.y == PALETTE_ROWS[row]):
             hint = lab.render("（棋子已全部摆上盘）", True, C((170, 158, 140)))
-            screen.blit(hint, (PALETTE_X0, PALETTE_ROWS[row] + 7))
+            screen.blit(hint, (PALETTE_X0, PALETTE_ROWS[row] + 8))
     for rect, piece, avail in slots:
         if not avail:                       # 已摆上棋盘：底板上就少这一枚
             continue
         cx, cy = rect.centerx, rect.centery
         ring = C((176, 44, 44)) if piece[0] == RED else C((40, 40, 46))
-        pygame.draw.circle(screen, C((252, 240, 212)), (cx, cy), 13)
-        pygame.draw.circle(screen, C((120, 92, 60)), (cx, cy), 13, 1)
-        pygame.draw.circle(screen, ring, (cx, cy), 11, 2)
+        pygame.draw.circle(screen, C((252, 240, 212)), (cx, cy), r_out)
+        pygame.draw.circle(screen, C((120, 92, 60)), (cx, cy), r_out, 1)
+        pygame.draw.circle(screen, ring, (cx, cy), r_in, 2)
         if edit_piece == piece and not marked:   # 标出即将被消耗的这一枚
-            pygame.draw.circle(screen, C((24, 150, 96)), (cx, cy), 15, 2)
+            pygame.draw.circle(screen, C((24, 150, 96)), (cx, cy), r_out + 2, 2)
             marked = True
         txt = font.render(CHINESE_PIECES[piece], True, ring)
         screen.blit(txt, (cx - txt.get_width() // 2, cy - txt.get_height() // 2))
 
     # 操作按钮
-    bfont = load_font(15)
+    bfont = load_font(20 if UI_BIG else 15)
     for rect, (key, label) in edit_action_rects():
         active = (key == "erase" and edit_piece == "erase")
         draw_button_face(screen, rect,
@@ -4881,9 +5074,13 @@ def draw_edit_scene(screen, board, edit_piece, message, difficulty, sound_on,
         screen.blit(surf, (rect.centerx - surf.get_width() // 2,
                            rect.centery - surf.get_height() // 2))
 
-    mfont = load_font(14)
-    for i, line in enumerate(wrap_text(message, mfont, SCREEN_W - 24)[:2]):
-        screen.blit(mfont.render(line, True, C((80, 68, 54))), (12, EDIT_MSG_Y + i * 16))
+    mfont = load_font(17 if UI_BIG else 14)
+    lh = 22 if UI_BIG else 16
+    # 能放几行就放几行：矮屏上按钮已经顶到屏幕底，提示只留得下一行，
+    # 宁可少写两行，也不让字被屏幕边缘切掉。
+    room = max(1, (SCREEN_H - 4 - EDIT_MSG_Y) // lh)
+    for i, line in enumerate(wrap_text(message, mfont, SCREEN_W - 24)[:min(room, 3)]):
+        screen.blit(mfont.render(line, True, C((80, 68, 54))), (12, EDIT_MSG_Y + i * lh))
 
 
 def draw_library_overlay(screen, entries, edit_message, off=0, category="全部",
@@ -4970,34 +5167,27 @@ def draw_library_overlay(screen, entries, edit_message, off=0, category="全部"
     screen.blit(lsurf, (lrect.centerx - lsurf.get_width() // 2,
                         lrect.centery - lsurf.get_height() // 2))
 
-    name_font = load_font(15)
-    meta_font = load_font(11)
-    star_font = load_font(15)
-    no_font = load_font(12)
+    if UI_BIG:
+        # 手机：一屏最多 10 行，字放大。每行改成两排——上排局名，
+        # 下排局号 / 难度 / 状态 / 存盘日，省出横向空间给名字，避免长名被截。
+        name_font = load_font(21)
+        meta_font = load_font(15)
+        star_font = load_font(23)
+        no_font = load_font(17)
+    else:
+        name_font = load_font(15)
+        meta_font = load_font(11)
+        star_font = load_font(15)
+        no_font = load_font(12)
     for row_i, (rect, idx) in enumerate(rows):
         entry = entries[idx]
         done = bool(entry.get("done"))
         draw_rect(screen, C((238, 248, 240)) if done else C((255, 255, 255)), rect, 0, 8)
         draw_rect(screen, C((120, 176, 132)) if done else C((206, 196, 180)), rect, 1, 8)
 
-        # 行号：按当前筛选结果的顺序编号。编号区固定 LIB_COL_NO_W 宽并右对齐，
-        # 这样第 100 局以后变成三位数也不会压到后面的难度字上。
-        no_s = no_font.render("%02d" % (off + row_i + 1), True, C((146, 134, 118)))
-        screen.blit(no_s, (rect.x + LIB_COL_NO_W - 4 - no_s.get_width(),
-                           rect.centery - no_s.get_height() // 2))
-
-        # 难度：编号后面一个字（易 / 中 / 难），绿 / 橙 / 红
-        lv = entry_difficulty(entry)
-        lv_s = load_font(11).render(LIB_LEVEL_SHORT.get(lv, "·"), True,
-                                    C(LIB_LEVEL_COLORS.get(lv, (160, 150, 136))))
-        screen.blit(lv_s, (rect.x + LIB_COL_NO_W + 2,
-                           rect.centery - lv_s.get_height() // 2))
-
         srect = library_star_rect(rect)
         drect = library_delete_rect(rect)
-        name_right, stat_x, time_x = library_row_columns(rect)
         day = stamp_day(entry_saved_at(entry))
-        name_x = rect.x + LIB_COL_NO_W + 18
 
         # 名称：去掉自带的「第001局」，避免与行号重复
         nm = entry.get("name", "未命名")
@@ -5005,10 +5195,8 @@ def draw_library_overlay(screen, entries, edit_message, off=0, category="全部"
         if stripped:
             nm = stripped
         nm_col = C((24, 132, 76)) if done else C((58, 50, 40))
-        nm_s = fit_text(nm, name_font, name_right - name_x, nm_col)
-        screen.blit(nm_s, (name_x, rect.centery - nm_s.get_height() // 2))
 
-        # 状态列：已通关（绿）/ 黑先（橙）/ 子数（灰）
+        # 状态：已通关（绿）/ 黑先（橙）/ 子数（灰）
         if done:
             dm = int(entry.get("done_moves") or 0)
             # 钩号在部分中文字体里是方框，改成「胜 N 手」最稳
@@ -5018,13 +5206,48 @@ def draw_library_overlay(screen, entries, edit_message, off=0, category="全部"
             stat, stat_col = "黑先", C((176, 106, 24))
         else:
             stat, stat_col = "%d子" % len(entry.get("pieces", [])), C((146, 134, 118))
-        stat_s = fit_text(stat, meta_font, LIB_COL_STAT_W, stat_col)
-        screen.blit(stat_s, (stat_x, rect.centery - stat_s.get_height() // 2))
 
-        # 存盘列：自存条目显示月-日，排局集条目没有存盘时间就留空
-        if day:
-            day_s = meta_font.render(day, True, C((132, 122, 106)))
-            screen.blit(day_s, (time_x, rect.centery - day_s.get_height() // 2))
+        lv = entry_difficulty(entry)
+
+        if UI_BIG:
+            no_s = no_font.render("%02d" % (off + row_i + 1), True, C((146, 134, 118)))
+            screen.blit(no_s, (rect.x + 8, rect.y + 6))
+            lv_s = meta_font.render(LIB_LEVEL_SHORT.get(lv, "·"), True,
+                                    C(LIB_LEVEL_COLORS.get(lv, (160, 150, 136))))
+            screen.blit(lv_s, (rect.x + 8, rect.y + 33))
+            name_x = rect.x + 50
+            name_right = srect.x - 10
+            nm_s = fit_text(nm, name_font, name_right - name_x, nm_col)
+            screen.blit(nm_s, (name_x, rect.y + 5))
+            bits = [stat] + ([day] if day else [])
+            meta_s = fit_text(" · ".join(bits), meta_font, name_right - name_x,
+                              C((132, 122, 106)))
+            screen.blit(meta_s, (name_x, rect.y + 35))
+        else:
+            # 行号：按当前筛选结果的顺序编号。编号区固定 LIB_COL_NO_W 宽并右对齐，
+            # 这样第 100 局以后变成三位数也不会压到后面的难度字上。
+            no_s = no_font.render("%02d" % (off + row_i + 1), True, C((146, 134, 118)))
+            screen.blit(no_s, (rect.x + LIB_COL_NO_W - 4 - no_s.get_width(),
+                               rect.centery - no_s.get_height() // 2))
+
+            # 难度：编号后面一个字（易 / 中 / 难），绿 / 橙 / 红
+            lv_s = load_font(11).render(LIB_LEVEL_SHORT.get(lv, "·"), True,
+                                        C(LIB_LEVEL_COLORS.get(lv, (160, 150, 136))))
+            screen.blit(lv_s, (rect.x + LIB_COL_NO_W + 2,
+                               rect.centery - lv_s.get_height() // 2))
+
+            name_right, stat_x, time_x = library_row_columns(rect)
+            name_x = rect.x + LIB_COL_NO_W + 18
+            nm_s = fit_text(nm, name_font, name_right - name_x, nm_col)
+            screen.blit(nm_s, (name_x, rect.centery - nm_s.get_height() // 2))
+
+            stat_s = fit_text(stat, meta_font, LIB_COL_STAT_W, stat_col)
+            screen.blit(stat_s, (stat_x, rect.centery - stat_s.get_height() // 2))
+
+            # 存盘列：自存条目显示月-日，排局集条目没有存盘时间就留空
+            if day:
+                day_s = meta_font.render(day, True, C((132, 122, 106)))
+                screen.blit(day_s, (time_x, rect.centery - day_s.get_height() // 2))
 
         # 收藏按钮（★ 明显一点，点一下收藏 / 再点取消）
         fav = bool(entry.get("fav"))
@@ -5037,10 +5260,10 @@ def draw_library_overlay(screen, entries, edit_message, off=0, category="全部"
 
         if del_pending == idx:
             draw_rect(screen, C((176, 52, 48)), drect, 0, 8)
-            cross = load_font(13).render("确认", True, K((255, 245, 235)))
+            cross = load_font(15 if UI_BIG else 13).render("确认", True, K((255, 245, 235)))
         else:
             draw_rect(screen, C((232, 214, 208)), drect, 0, 8)
-            cross = load_font(16).render("×", True, C((168, 60, 54)))
+            cross = load_font(24 if UI_BIG else 16).render("×", True, C((168, 60, 54)))
         screen.blit(cross, (drect.centerx - cross.get_width() // 2,
                             drect.centery - cross.get_height() // 2))
 
@@ -5078,8 +5301,10 @@ def draw_library_overlay(screen, entries, edit_message, off=0, category="全部"
                                         C((92, 82, 68)) if enabled else C((176, 168, 154)))
             screen.blit(surf, (rect.centerx - surf.get_width() // 2,
                                rect.centery - surf.get_height() // 2))
-    foot = io_msg or ("%d-%d / 共 %d 局　点行载入　★ 收藏　× 删除"
-                      % (first, last, total))
+    foot = io_msg or (("%d-%d / 共 %d 局　点一下载入，上下拖动翻页"
+                       % (first, last, total)) if UI_BIG else
+                      ("%d-%d / 共 %d 局　点行载入　★ 收藏　× 删除"
+                       % (first, last, total)))
     fcol = C((34, 130, 84)) if io_msg else C((128, 116, 100))
     fs = load_font(14 if UI_BIG else 12).render(foot, True, fcol)
     if not rows and not io_msg:
@@ -5104,14 +5329,15 @@ def draw_naming_overlay(screen, name_buf, caret_on, mode="save", turn=RED, detai
     draw_rect(screen, C((34, 150, 96)), panel, 2, 12)
 
     caption = "重命名残局" if mode == "rename" else "给这局残局起个名字"
-    title = load_font(17).render(caption, True, C((58, 50, 40)))
+    title = load_font(23 if UI_BIG else 17).render(caption, True, C((58, 50, 40)))
     screen.blit(title, (panel.x + 16, panel.y + 14))
 
-    field = pygame.Rect(panel.x + 16, panel.y + 48, panel.w - 32, 40)
+    field = pygame.Rect(panel.x + 16, panel.y + (46 if UI_BIG else 40),
+                        panel.w - 32, 52 if UI_BIG else 40)
     draw_rect(screen, C((255, 255, 255)), field, 0, 8)
     draw_rect(screen, C((176, 166, 150)), field, 1, 8)
 
-    font = load_font(18)
+    font = load_font(22 if UI_BIG else 18)
     shown = name_buf
     while font.size(shown)[0] > field.w - 24 and shown:
         shown = shown[1:]
@@ -5121,19 +5347,24 @@ def draw_naming_overlay(screen, name_buf, caret_on, mode="save", turn=RED, detai
         cx = field.x + 12 + surf.get_width()
         pygame.draw.line(screen, C((34, 150, 96)), (cx, field.y + 8), (cx, field.bottom - 8), 2)
 
+    ok_rect, cancel_rect = naming_button_rects(mode)
+
     if mode == "rename":
         trect = naming_turn_rect(panel)
         red = (turn != BLACK)
         draw_rect(screen, C((238, 246, 240)) if red else C((236, 236, 240)), trect, 0, 8)
         draw_rect(screen, C((110, 176, 132)) if red else C((120, 124, 140)), trect, 1, 8)
-        tlabel = load_font(13).render("先行：%s" % name_of(turn), True,
-                                      C((30, 112, 66)) if red else C((64, 66, 78)))
+        tlabel = load_font(17 if UI_BIG else 13).render(
+            "先行：%s" % name_of(turn), True,
+            C((30, 112, 66)) if red else C((64, 66, 78)))
         screen.blit(tlabel, (trect.centerx - tlabel.get_width() // 2,
                              trect.centery - tlabel.get_height() // 2))
-        hint = load_font(11).render("点这里切换红先 / 黑先（人类执后手）", True, C((150, 138, 122)))
-        screen.blit(hint, (trect.right + 10, trect.centery - hint.get_height() // 2))
+        if not UI_BIG:
+            hint = load_font(11).render("点这里切换红先 / 黑先（人类执后手）", True,
+                                        C((150, 138, 122)))
+            screen.blit(hint, (trect.right + 10, trect.centery - hint.get_height() // 2))
 
-        tfont = load_font(12)
+        tfont = load_font(15 if UI_BIG else 12)
         # 详情按「　」分段装行，避免把日期时间从中间截断
         lines, cur = [], ""
         for seg in [s for s in detail.split("　") if s]:
@@ -5148,16 +5379,37 @@ def draw_naming_overlay(screen, name_buf, caret_on, mode="save", turn=RED, detai
             lines.append(cur)
         for i, line in enumerate(lines[:2]):
             screen.blit(tfont.render(line, True, C((128, 116, 100))),
-                        (panel.x + 16, panel.y + 132 + i * 18))
-        tips = ["回车确认，Esc 取消；改名不影响局面、收藏与通关记录。"]
+                        (panel.x + 16, trect.bottom + 8 + i * (21 if UI_BIG else 18)))
+        tips = ["点「改名」确认，「返回」不改。"]
+        if not UI_BIG:
+            tips = ["回车确认，Esc 取消；改名不影响局面、收藏与通关记录。"]
     else:
-        tips = ["支持中文输入法直接输入，也可 Ctrl+V 粘贴；回车确认，Esc 取消。",
-                "留空则使用自动命名（残局 月日-时分秒）。"]
-    tfont = load_font(12)
-    base = panel.y + (168 if mode == "rename" else 96)
+        if UI_BIG:
+            tips = ["点「保存」存进残局库，点「返回」不存。",
+                    "名字可以留空，保存时按日期自动命名。"]
+        else:
+            tips = ["支持中文输入法直接输入，也可 Ctrl+V 粘贴；回车确认，Esc 取消。",
+                    "留空则使用自动命名（残局 月日-时分秒）。"]
+
+    tfont = load_font(15 if UI_BIG else 12)
+    line_h = 22 if UI_BIG else 18
+    base = ok_rect.y - 8 - line_h * len(tips)
     for i, line in enumerate(tips):
         screen.blit(tfont.render(line, True, C((120, 108, 92))),
-                    (panel.x + 16, base + i * 18))
+                    (panel.x + 16, base + i * line_h))
+
+    # 两个按钮：左边「返回」（不存），右边「保存 / 改名」
+    bfont = load_font(21 if UI_BIG else 14)
+    for rect, text, primary in ((cancel_rect, "返回", False),
+                                (ok_rect, "改名" if mode == "rename" else "保存", True)):
+        draw_button_face(screen, rect,
+                         C((34, 150, 96)) if primary else C((250, 246, 238)),
+                         C((24, 120, 76)) if primary else C((196, 186, 170)),
+                         radius=10, active=primary)
+        col = C((255, 255, 255)) if primary else C((92, 82, 68))
+        surf2 = bfont.render(text, True, col)
+        screen.blit(surf2, (rect.centerx - surf2.get_width() // 2,
+                            rect.centery - surf2.get_height() // 2))
 
 
 # ---------------------------- 主循环 ----------------------------
@@ -5789,9 +6041,11 @@ def home_button_rects():
         ys = [top + i * (bh + gap) for i in range(4)]
         sy = ys[-1] + bh + gap
     else:
+        # v2.15：桌面画布从 838 加到 880，按钮组跟着下移一半余量，底部不再空一大块
+        shift = max(0, (SCREEN_H - 838) // 2)
         bw, bh, gap = 300, 62, 20
-        ys = [248, 330, 412, 494]
-        sbw, sbh, sgap, sy = 140, 46, 10, 586
+        ys = [248 + shift, 330 + shift, 412 + shift, 494 + shift]
+        sbw, sbh, sgap, sy = 140, 46, 10, 586 + shift
     x = cx - bw // 2
     out = []
     for y, key, label in zip(ys,
@@ -6607,9 +6861,12 @@ def main():
         avail_w = max(320, dinfo.current_w - 60)
         avail_h = max(420, dinfo.current_h - 110)
         scale = min(1.0, avail_w / SCREEN_W, avail_h / SCREEN_H)
-        win_w = max(320, int(SCREEN_W * scale))
-        win_h = max(420, int(SCREEN_H * scale))
-        display = pygame.display.set_mode((win_w, win_h))
+        win_w = max(MIN_WIN_W, int(SCREEN_W * scale))
+        win_h = max(MIN_WIN_H, int(SCREEN_H * scale))
+        # v2.15：桌面窗口改成可拉伸（右上角可最大化，边框可拖）。
+        # 画面保持等比缩放、居中不动布局：拉大就是整体放大，不会出现字压字；
+        # 拉成非竖屏比例时，剩余的边用木色填，不留黑框。
+        display = pygame.display.set_mode((win_w, win_h), pygame.RESIZABLE)
     # 屏幕探针：main.py 启动时先量真实分辨率写进 XQ_BIG_UI；直接跑源码时按窗口尺寸判断。
     # 手机（短边 ≥720 物理像素）自动切到放大版界面，桌面保持原尺寸。
     big_env = os.environ.get("XQ_BIG_UI")
@@ -6649,7 +6906,7 @@ def main():
         dw, dh = max(1, draw_w), max(1, draw_h)
         try:
             if (dw, dh) != (cur_w, cur_h):
-                surf.fill((0, 0, 0))    # 上下或左右的黑边
+                surf.fill(TH["bg"])     # 上下或左右留边：用棋盘木色，不用刺眼的纯黑
             if (dw, dh) == (SCREEN_W, SCREEN_H):
                 surf.blit(screen, (off_x, off_y))
             else:
@@ -6667,7 +6924,32 @@ def main():
             pass
 
     def to_logical(pos):
-        return window_to_logical(pos, win_w, win_h)
+        """窗口坐标 → 逻辑坐标。窗口可以拉伸，这里每次按显示 Surface 的实际尺寸
+        换算，拖边框的那一瞬间也不会拿上一帧的旧比例去算，点位不偏。"""
+        try:
+            w, h = pygame.display.get_surface().get_size()
+        except (pygame.error, AttributeError):
+            w, h = win_w, win_h
+        return window_to_logical(pos, w, h)
+
+    # v2.15 安卓：少数机型刚 set_mode 时报的还是旧可用高度（导航栏/状态栏还没真正让位），
+    # 画布按旧比例算就会多出一条木色边。正式进循环前再量一次，比例差两行以上
+    # 就按新尺寸重排一遍；手机不跟桌面那样做可拉伸窗口，这里只校正这一次。
+    if IS_ANDROID:
+        try:
+            pygame.event.pump()
+            _aw, _ah = pygame.display.get_surface().get_size()
+        except (pygame.error, AttributeError):
+            _aw, _ah = win_w, win_h
+        if _aw >= 240 and _ah >= 320:
+            _want = max(MIN_BIG_H, min(int(round(SCREEN_W * _ah / float(_aw))),
+                                       MAX_BIG_H))
+            if 24 <= abs(_want - SCREEN_H) <= 400:
+                set_ui_mode(True, _aw, _ah)
+                screen = pygame.Surface((SCREEN_W, SCREEN_H))
+                # 窗口尺寸没变、画布变了，present() 的缓存要一起刷新，否则还按旧比例缩放
+                win_w, win_h = _aw, _ah
+                draw_w, draw_h, off_x, off_y = fit_layout(win_w, win_h)
 
     # v2.11：不再播开机动画。手机上一开始就先把主页画出来（主循环第一帧就是主页），
     # 残局库这类耗时活丢后台，等主人点菜单时基本已经准备完毕，点了还没好也只是闪一下。
@@ -6733,6 +7015,7 @@ def main():
         "replay_auto": False,
         "replay_last": 0.0,
         "scroll_drag": False,
+        "lib_tap": None,               # 残局库行上按下的待定点击（拖动则改判为滚动）
         "scroll_grab": 0,
         "lib_del_pending": None,
         "bgm_state": {},
@@ -7063,6 +7346,9 @@ def main():
         except (AttributeError, pygame.error):
             pass
         if not confirm:
+            if mode != "rename":
+                S["edit_msg"] = "已取消命名，没有存盘。"
+                S["message"] = "已取消命名，没有存盘；要存的话再点「保存」。"
             return
         if mode == "rename":
             apply_rename()
@@ -8003,6 +8289,17 @@ def main():
     except pygame.error:
         pass
 
+    # v2.14：先把主页画出来再进主循环。原来第一帧要等事件、计时、音乐都跑一遍，
+    # 安卓上就是一小段黑屏，用户以为还没启动、连敲屏幕，正好点进菜单。
+    # 现在先画一帧，随后 0.9 秒内的触摸一律丢掉，主页露脸之前/刚露脸时的误触
+    # 不会再把玩家带进对战。
+    try:
+        draw_home(screen, S["bgm"])
+        present()
+    except (pygame.error, AttributeError):
+        pass
+    boot_guard_until = time.perf_counter() + 0.9
+
     def sync_library():
         """用主循环里唯一的等待点：真的还没读完时，一主线程 join，最多闪一下。"""
         if S.get("lib_ready"):
@@ -8079,9 +8376,17 @@ def main():
             events = [ev for ev in events
                       if ev.type in _keep
                       or (ev.type == pygame.KEYDOWN and ev.key == _back)]
+        if IS_ANDROID and time.perf_counter() < boot_guard_until:
+            # 主页刚出来这一小段：启动时连敲攒下的点按全部丢掉，免得误入对战 / 残局
+            _ptr = (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION)
+            events = [ev for ev in events if ev.type not in _ptr]
         if events and not S.get("lib_ready"):
             sync_library()          # 此时后台通常已读完，立即返回，不阻塞
-        if (win_w, win_h) != (SCREEN_W, SCREEN_H):
+        try:
+            _cur_size = pygame.display.get_surface().get_size()
+        except (pygame.error, AttributeError):
+            _cur_size = (win_w, win_h)
+        if tuple(_cur_size) != (SCREEN_W, SCREEN_H):
             for ev in events:
                 if "pos" in ev.dict:
                     ev.dict["pos"] = to_logical(ev.dict["pos"])
@@ -8117,6 +8422,18 @@ def main():
                     esc_back_home()
                 else:
                     running = False
+                continue
+
+            if event.type == pygame.VIDEORESIZE and not IS_ANDROID:
+                # 桌面窗口可拖边角 / 可最大化。拖到过小时夹回最小尺寸，
+                # 否则画面缩到看不清，鼠标也点不准 26 像素宽的小格子。
+                nw = max(MIN_WIN_W, int(event.w))
+                nh = max(MIN_WIN_H, int(event.h))
+                if (nw, nh) != (int(event.w), int(event.h)):
+                    try:
+                        pygame.display.set_mode((nw, nh), pygame.RESIZABLE)
+                    except pygame.error:
+                        pass
                 continue
 
             if event.type == pygame.QUIT:
@@ -8265,6 +8582,7 @@ def main():
                         S["lib_open"] = False
                         S["lib_focus"] = False
                         S["lib_query"] = ""
+                        S["lib_tap"] = None
                         S["edit_msg"] = ""
                     elif S["replay"]:
                         S["replay"] = False
@@ -8276,6 +8594,7 @@ def main():
                 elif event.key == pygame.K_e:
                     if S["lib_open"]:
                         S["lib_open"] = False
+                        S["lib_tap"] = None
                         S["edit_msg"] = ""
                     elif S["editing"]:
                         leave_edit(True)
@@ -8336,6 +8655,31 @@ def main():
                 if scroll:
                     S["lib_off"] = library_scroll_off(
                         scroll, total, event.pos[1], S["scroll_grab"])
+                continue
+            # 在列表上拖动 = 滚动（手指上下拉）；位移超过 8 像素才算拖，
+            # 没超就算点，抬手时才载入这一局。
+            if event.type == pygame.MOUSEMOTION and S.get("lib_tap"):
+                tap = S["lib_tap"]
+                if not tap["moved"] and abs(event.pos[1] - tap["y"]) > 8:
+                    tap["moved"] = True
+                if tap["moved"]:
+                    _, _, _, total, _ = library_layout(
+                        S["entries"], S.get("lib_off", 0), S["lib_category"],
+                        S["lib_query"], S.get("lib_pieces", "全部"),
+                        S.get("lib_level", "全部"))
+                    S["lib_off"] = lib_drag_off(tap, event.pos[1], total)
+                    S["edit_msg"] = ""
+                continue
+            if (event.type == pygame.MOUSEBUTTONUP and event.button == 1
+                    and S.get("lib_tap")):
+                tap = S["lib_tap"]
+                S["lib_tap"] = None
+                if tap["moved"]:
+                    persist_lib_page()
+                elif (S["lib_open"]
+                      and lib_tap_loads(tap, len(S["entries"]))):
+                    S["lib_del_pending"] = None
+                    load_entry(tap["idx"])
                 continue
             if (event.type == pygame.MOUSEBUTTONUP and event.button == 1
                     and S["scroll_drag"]):
@@ -8401,11 +8745,19 @@ def main():
                             break
                 continue
             if S["naming"]:
-                # 改名浮层里可点「先行」切换红先 / 黑先
-                if (event.button == 1 and S.get("naming_mode") == "rename"
-                        and naming_turn_rect().collidepoint(pos)):
-                    S["rename_turn"] = opponent(S.get("rename_turn", RED))
-                    beep("select")
+                # v2.14：浮层底部有两个按钮，手机上不靠键盘也能选「存」或「退」
+                _mode = S.get("naming_mode", "save")
+                _ok, _cancel = naming_button_rects(_mode)
+                if event.button == 1:
+                    if _ok.collidepoint(pos):
+                        close_naming(True)
+                        beep("select")
+                    elif _cancel.collidepoint(pos):
+                        close_naming(False)
+                        beep("illegal")
+                    elif _mode == "rename" and naming_turn_rect().collidepoint(pos):
+                        S["rename_turn"] = opponent(S.get("rename_turn", RED))
+                        beep("select")
                 continue
 
             # 残局库浮层优先
@@ -8417,6 +8769,19 @@ def main():
                         S.get("lib_level", "全部"))
                     sfield = library_search_rect(panel)
                     ex_rect, im_rect, rs_rect = library_io_rects(panel)
+                    # v2.14：按在列表行上先不动手，等抬手再判——拖了算滚动，
+                    # 没拖才算点开这一局。否则手指一划就误载入残局。
+                    for _r, _i in rows:
+                        if (_r.collidepoint(pos)
+                                and not library_star_rect(_r).collidepoint(pos)
+                                and not library_delete_rect(_r).collidepoint(pos)):
+                            S["lib_tap"] = {"idx": _i, "y": pos[1], "off": off,
+                                            "moved": False}
+                            break
+                    else:
+                        S["lib_tap"] = None
+                    if S.get("lib_tap"):
+                        continue
                     if sfield.collidepoint(pos):
                         S["lib_focus"] = True
                         try:
