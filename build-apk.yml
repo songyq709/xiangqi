@@ -1,0 +1,255 @@
+name: 打包安卓 APK
+
+# 推送即构建，也可在 Actions 页面点 Run workflow 手动触发
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  apk:
+    name: buildozer debug apk
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+
+    steps:
+      - name: 取代码
+        uses: actions/checkout@v7
+
+      # 第 15 轮：r18 出来的包仍叫 xiangqi-2.3-…，说明仓库里的 xiangqi.py 与
+      # buildozer.spec 根本没被覆盖（网页上传同名文件后必须点 Commit changes）。
+      # 在这一步就拦下来，几秒钟看出「传错了」，不用白等一小时。
+      - name: 核对仓库里的程序版本
+        run: |
+          set -e
+          V=$(grep -m1 '^VERSION = ' xiangqi.py | sed -E 's/.*"(.*)".*/\1/')
+          S=$(grep -m1 '^version = ' buildozer.spec | sed -E 's/.*= *//')
+          N=$(grep -m1 '^android.numeric_version' buildozer.spec | sed -E 's/.*= *//')
+          echo "xiangqi.py 里的 VERSION = ${V:-未找到}"
+          echo "buildozer.spec 的 version = ${S:-未找到} / numeric = ${N:-未找到}"
+          {
+            echo "### 本次构建版本"
+            echo ""
+            echo "| 项目 | 值 |"
+            echo "| --- | --- |"
+            echo "| xiangqi.py VERSION | ${V:-未找到} |"
+            echo "| buildozer.spec version | ${S:-未找到} |"
+            echo "| numeric_version | ${N:-未找到} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$V" ] || [ -z "$S" ]; then
+            echo "::error::没读到版本号，确认仓库根目录有 xiangqi.py 与 buildozer.spec"
+            exit 1
+          fi
+          if [ "$V" != "$S" ]; then
+            echo "::error::两个文件版本不一致：xiangqi.py=$V，spec=$S，请两个一起覆盖上传"
+            exit 1
+          fi
+          LOW=$(printf '%s\n2.9\n' "$V" | sort -V | head -1)
+          if [ "$LOW" != "2.9" ]; then
+            echo "::error::仓库里还是旧版 $V（要 2.9）。网页上传同名文件后必须点 Commit changes 才生效。"
+            exit 1
+          fi
+          echo "版本核对通过：$V"
+
+      - name: 钉住构建参数
+        run: |
+          # 第 9 轮已确认：p4a 的 pygame 配方没有把 cython 列进依赖，
+          # pygame 的 setup.py 在 “Compiling Cython files” 这一步直接报
+          # “You need cython” 然后退出。所以把 cython 显式写进 requirements，
+          # 让 p4a 先把它装进 hostpython。pygame 2.5.x 的 .pyx 是按 Cython 3 写的，
+          # 而 p4a 自带的 cython 配方是 0.29.36，这里钉 3.0.11。
+          sed -i 's|^requirements *=.*|requirements = python3==3.11.5,pygame==2.5.2,cython==3.0.11|' buildozer.spec
+          sed -i '/^android.ndk *=/d; /^p4a.branch *=/d; /^p4a.source_dir *=/d; /^android.api *=/d; /^android.ant_path *=/d' buildozer.spec
+          # 第 12 轮：buildozer 默认去 archive.apache.org 下 apache-ant-1.9.4，
+          # 这个站点在国内链路上经常直接 reset（日志里的 ConnectionResetError）。
+          # 改成用 apt 预装的 ant，spec 里指明路径，buildozer 就不再联网下 ant。
+          sed -i '/^p4a.bootstrap *=/a android.ndk = 25b\np4a.branch = 2024.01.21\nandroid.api = 33\nandroid.ant_path = /usr/share/ant\np4a.source_dir = '"$GITHUB_WORKSPACE"'/p4a-src' buildozer.spec
+          echo "--- 最终生效的关键行 ---"
+          grep -nE "^(requirements|android\.ndk|p4a\.branch|p4a\.source_dir|android\.api|android\.ant_path|android\.archs)" buildozer.spec
+
+      - name: 装 JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: 系统依赖
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq git zip unzip autoconf automake libtool \
+            pkg-config zlib1g-dev libncurses-dev libtinfo6 cmake libffi-dev \
+            libssl-dev ccache ant
+          echo "--- ant ---"
+          which ant && ant -version
+          ls -d /usr/share/ant
+          python3 --version
+          java -version 2>&1 | head -1
+
+      - name: 装 buildozer
+        run: |
+          export PIP_RETRIES=5 PIP_DEFAULT_TIMEOUT=60
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --retries 5 --timeout 60 \
+            "setuptools==68.2.2" "wheel==0.41.2" \
+            "cython==0.29.36" "buildozer==1.5.0"
+          buildozer --version
+
+      # 第 14 轮：三次尝试全卡在 toolchain 阶段的下载上，报 HTTP 504 Gateway Time-out。
+      # 之前每轮都要重新下 Android SDK / NDK / 各 recipe 的源码包，dl.google.com
+      # 一旦抽风整轮就白等。这里把「纯依赖」缓存起来：SDK、NDK、packages（下载的
+      # 源码 tar）。代码本身不进缓存——dist/build 里含打包进去的 app 代码，
+      # 缓存它会导致装上新包却跑旧代码。
+      - name: 缓存 Android SDK / NDK / 依赖包
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.buildozer/android/platform/android-sdk
+            ~/.buildozer/android/platform/android-ndk-r25b
+            ~/.buildozer/android/platform/build-arm64-v8a/packages
+          key: xq-deps-r25b-py3115-pygame252-v1
+          restore-keys: |
+            xq-deps-r25b-py3115-pygame252-
+
+      # buildozer 内部用 `git clone -b 2024.01.21 --single-branch` 取 p4a，
+      # 这个写法在 GitHub 上取不到（第 6、7 次构建都在这里失败），
+      # 所以改成自己按 refs/tags 精确取，再用 spec 里的 p4a.source_dir 直接指向它，
+      # buildozer 就不会再跑任何 git 逻辑。代价是 p4a 的运行依赖要我们自己装。
+      - name: 预置 p4a 源码
+        run: |
+          set -e
+          P4A="$GITHUB_WORKSPACE/p4a-src"
+          rm -rf "$P4A"
+          git init -q "$P4A"
+          cd "$P4A"
+          git remote add origin https://github.com/kivy/python-for-android.git
+          ok=0
+          for ref in refs/tags/v2024.01.21 refs/tags/2024.01.21 refs/heads/2024.01.21; do
+            echo "尝试取 $ref"
+            if git fetch -q --depth 1 origin "+$ref:refs/tags/p4a-src"; then ok=1; break; fi
+          done
+          if [ "$ok" != "1" ]; then
+            echo "::error::p4a 的 2024.01.21 取不到，下面是远端真实引用"
+            git ls-remote --tags origin | tail -30
+            git ls-remote --heads origin | head -20
+            exit 1
+          fi
+          git checkout -q -B 2024.01.21 FETCH_HEAD
+          echo "--- 版本核对（应为 3.11.5 / 3.11.5）---"
+          grep -m1 -E "^    version" pythonforandroid/recipes/hostpython3/__init__.py
+          grep -m1 -E "^    version" pythonforandroid/recipes/python3/__init__.py
+          echo "--- 装 p4a 运行依赖 ---"
+          python3 -m pip install --user "appdirs" "colorama>=0.3.3" "jinja2" \
+            "sh>=1.10,<2.0" "build" "toml" "packaging"
+          python3 -c "import pythonforandroid; print('p4a 可导入:', pythonforandroid.__file__)"
+
+      # 第 11 轮的根因：pygame 自带的 buildconfig/Setup.Android.SDL2.in 里，
+      # surface 模块只写了 surface.c / alphablit.c / surface_fill.c，
+      # 漏了 src_c/simd_blitters_sse2.c（桌面模板里有）。
+      # 于是 surface.so 引用 alphablit_alpha_sse2_argb_surf_alpha 却没人定义它，
+      # 安卓 bionic 链接器直接报 cannot locate symbol，pygame.display 导入失败，
+      # 表现为点图标一闪就退。这里在 p4a 生成 Setup 之后把这两行补回去。
+      - name: 修补 p4a 的 pygame 配方（补 SIMD 源文件）
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE/p4a-src"
+          python3 - <<'PY'
+          import io, re
+          p = 'pythonforandroid/recipes/pygame/__init__.py'
+          s = io.open(p, encoding='utf-8').read()
+          if 'simd_blitters_sse2' in s:
+              print('配方已含 simd_blitters_sse2，跳过')
+              raise SystemExit(0)
+          m = re.search(r'(?m)^([ \t]+)open\("Setup", "w"\)\.write\(setup_file\)', s)
+          if not m:
+              raise SystemExit('没找到写入 Setup 的那一行，配方结构变了，需人工确认')
+          ind = m.group(1)
+          add = (f'{ind}setup_file = setup_file.replace(\n'
+                 f'{ind}    "surface src_c/surface.c",\n'
+                 f'{ind}    "surface src_c/simd_blitters_sse2.c '
+                 f'src_c/simd_blitters_avx2.c src_c/surface.c")\n')
+          s = s[:m.start()] + add + s[m.start():]
+          io.open(p, 'w', encoding='utf-8').write(s)
+          print('已给 pygame 配方的 Setup 补上 SIMD 源文件')
+          PY
+          grep -n "simd_blitters_sse2" pythonforandroid/recipes/pygame/__init__.py
+
+      - name: 构建 APK
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          set +e
+          # 第 14 轮：一次构建要联网取 SDK / NDK / pip 包，任何一次连接被重置
+          # （Errno 104 / 110）或网关 504 都会让整轮白等。buildozer 是幂等的，
+          # 已装好的组件第二次会跳过，所以失败就重跑，最多五次，每次多等一会儿。
+          for i in 1 2 3 4 5; do
+            echo "===== buildozer 第 $i 次尝试 ====="
+            yes 2>/dev/null | buildozer -v android debug > build_out_$i.log 2>&1
+            code=$?
+            if [ -n "$(ls bin/*.apk 2>/dev/null)" ]; then
+              echo "第 $i 次尝试成功（退出码 $code）"
+              break
+            fi
+            echo "::warning::第 $i 次尝试失败，退出码 $code，日志 $(wc -l < build_out_$i.log) 行"
+            grep -nE "ConnectionResetError|Errno 104|Errno 110|ReadTimeout|Temporary failure|Failed to establish|HTTP Error" build_out_$i.log | tail -5
+            echo "----- 卡在哪个下载 -----"
+            grep -nE "Downloading|Download failed|urlopen|from https?://" build_out_$i.log | tail -8
+            tail -12 build_out_$i.log
+            sleep 45
+          done
+          cat build_out_*.log > build_out.log 2>/dev/null
+          if [ -z "$(ls bin/*.apk 2>/dev/null)" ]; then
+            echo "::error::五次尝试都没有产出 apk，日志 $(wc -l < build_out.log) 行"
+            echo "===== A. 最后在编哪个配方 ====="
+            grep -nE "Building recipe|Installing .* into|Recipe .* is already" build_out.log | tail -8
+            echo "===== B. 报错行（取最后 30 条）====="
+            grep -nE "error:|Error:|ERROR|fatal:|Traceback|Command failed|No such file|Errno" build_out.log | tail -30
+            echo "===== C. 日志最后 200 行原文 ====="
+            tail -200 build_out.log
+            exit 1
+          fi
+          echo "===== 成功，日志末尾 30 行 ====="
+          tail -30 build_out.log
+          echo "===== 核对 surface.so 是否还缺 SIMD 符号 ====="
+          SO=$(find .buildozer -type f -path "*pygame/surface.so" | head -1)
+          READELF=$(find "$HOME/.buildozer" -type f -name llvm-readelf | head -1)
+          echo "surface.so = ${SO:-未找到}"
+          echo "llvm-readelf = ${READELF:-未找到}"
+          if [ -n "$SO" ] && [ -n "$READELF" ]; then
+            if "$READELF" --dyn-syms -W "$SO" | grep -qE "UND +(alphablit|blit_blend)"; then
+              "$READELF" --dyn-syms -W "$SO" | grep -E "UND +(alphablit|blit_blend)" | head -5
+              echo "::error::surface.so 仍缺 SIMD 实现，装上去还会闪退"
+              exit 1
+            fi
+            echo "符号核对通过：alphablit / blit_blend 均已定义"
+          else
+            echo "跳过符号核对（未找到 so 或 readelf），不影响出包"
+          fi
+
+      - name: 失败时把完整日志存成文件
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: 构建日志
+          path: build_out.log
+          if-no-files-found: ignore
+
+      # 出包后再核一次：APK 名字里必须带本次版本号。名字不对说明 spec 没生效，
+      # 与其让人装上一版旧包，不如在这里失败。
+      - name: 核对产物版本
+        if: success()
+        run: |
+          set -e
+          V=$(grep -m1 '^VERSION = ' xiangqi.py | sed -E 's/.*"(.*)".*/\1/')
+          ls -l bin/ || true
+          if ! ls bin/*.apk 2>/dev/null | grep -q -- "-$V-"; then
+            echo "::error::APK 名字里没有 -$V-，spec 的 version 没生效"
+            exit 1
+          fi
+          echo "产物核对通过：$(ls bin/*.apk | head -1)"
+
+      - name: 上传 APK
+        if: success()
+        uses: actions/upload-artifact@v7
+        with:
+          name: 中国象棋-apk-r${{ github.run_number }}
+          path: bin/*.apk
+          if-no-files-found: error

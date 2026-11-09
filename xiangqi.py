@@ -523,7 +523,7 @@ def load_font(size):
 
 
 # ---------------------------- 版本 / 创作者 / 设置项 ----------------------------
-VERSION = "2.16"
+VERSION = "2.17"
 APP_NAME = "中国象棋-智算单机版"
 CREATOR = "songyq"     # 主页右下角标注；
 TIME_OPTIONS = [5, 10, 20, 30, 60]    # 对战时间（分钟）
@@ -2063,30 +2063,36 @@ def load_user_music(name):
     return snd
 
 
-def build_sounds():
-    sounds = {
-        # 选中棋子：轻微高频短音
-        "select": pygame.mixer.Sound(buffer=_build_wave([(1100, 0.045, 70)], 0.20)),
-        # 落子：木质感敲击。做三个音高，按落点高低挑一个 —— 上三路清脆、下三路低沉，
-        # 听着像真在木盘上落子（外置 音效\move.wav 存在时三个变体都用文件里的声音）
-        "move": pygame.mixer.Sound(buffer=_build_wave([(520, 0.07, 45)], 0.42, noise=0.55)),
-        # v2.13：三个音高变体下面统一指向 move，启动时不必白合成三份波形
-        # 吃子：更低更厚
-        "capture": pygame.mixer.Sound(buffer=_build_wave([(260, 0.13, 26)], 0.58, noise=0.72)),
-        # 将军：三声提示
-        "check": pygame.mixer.Sound(
-            buffer=_build_wave([(760, 0.08, 18), (1020, 0.09, 14), (760, 0.11, 14)], 0.45)),
-        # 胜利：上行音阶
-        "win": pygame.mixer.Sound(
-            buffer=_build_wave([(523, 0.11, 12), (659, 0.11, 12),
-                                (784, 0.11, 12), (1047, 0.22, 8)], 0.45)),
-        # 失败 / 超时：下行音阶
-        "lose": pygame.mixer.Sound(
-            buffer=_build_wave([(392, 0.13, 12), (330, 0.13, 12), (262, 0.26, 8)], 0.45)),
-        # 误操作：低沉闷响
-        "illegal": pygame.mixer.Sound(buffer=_build_wave([(150, 0.10, 30)], 0.35, noise=0.6)),
-    }
-    # 外置替换：音效\move.wav（或 音效\落子.wav）存在就用文件里的声音
+# v2.17：波形合成表。启动时这 8 段要 160ms 左右（手机上更久），
+# 现在拆成「入场动画每帧做一段」，主线程不再一口气卡住。
+_SOUND_BUILDERS = (
+    ("select",  lambda: _build_wave([(1100, 0.045, 70)], 0.20)),
+    ("move",    lambda: _build_wave([(520, 0.07, 45)], 0.42, noise=0.55)),
+    ("capture", lambda: _build_wave([(260, 0.13, 26)], 0.58, noise=0.72)),
+    ("check",   lambda: _build_wave([(760, 0.08, 18), (1020, 0.09, 14),
+                                     (760, 0.11, 14)], 0.45)),
+    ("win",     lambda: _build_wave([(523, 0.11, 12), (659, 0.11, 12),
+                                     (784, 0.11, 12), (1047, 0.22, 8)], 0.45)),
+    ("lose",    lambda: _build_wave([(392, 0.13, 12), (330, 0.13, 12),
+                                     (262, 0.26, 8)], 0.45)),
+    ("illegal", lambda: _build_wave([(150, 0.10, 30)], 0.35, noise=0.6)),
+)
+
+
+def make_one_sound(sounds, idx):
+    """按序合成一个音效放进 sounds；返回是否还有下一个。"""
+    if idx >= len(_SOUND_BUILDERS):
+        return False
+    key, fn = _SOUND_BUILDERS[idx]
+    try:
+        sounds[key] = pygame.mixer.Sound(buffer=fn())
+    except (pygame.error, OSError, ValueError):
+        pass
+    return idx + 1 < len(_SOUND_BUILDERS)
+
+
+def finish_sounds(sounds):
+    """外置音效替换 + 三个音高变体，补充分步构建的收尾。"""
     for key in list(sounds):
         path = find_audio(SFX_DIR, (key,) + SFX_ALIASES.get(key, ()))
         if not path:
@@ -2095,10 +2101,20 @@ def build_sounds():
             sounds[key] = pygame.mixer.Sound(path)
         except (pygame.error, OSError):
             pass
-    # 换了落子声，三个音高变体也一起换，不然只有一部分落子是新声音
     move_snd = sounds.get("move")
     for key in ("move_a", "move_b", "move_c"):
         sounds[key] = move_snd
+
+
+def build_sounds():
+    """一次性建好全部音效（桌面 / 兼容旧调用用）。"""
+    sounds = {}
+    for key, fn in _SOUND_BUILDERS:
+        try:
+            sounds[key] = pygame.mixer.Sound(buffer=fn())
+        except (pygame.error, OSError, ValueError):
+            pass
+    finish_sounds(sounds)
     return sounds
 
 
@@ -3857,6 +3873,25 @@ def pick_music_file():
             title="导入曲子（最多 4 首）",
             filetypes=[("音频文件", "*.mp3 *.ogg *.wav"),
                        ("MP3", "*.mp3"), ("OGG", "*.ogg"), ("WAV", "*.wav"),
+                       ("所有文件", "*.*")])
+        root.destroy()
+        return path or ""
+    except Exception:
+        return ""
+
+
+def pick_boot_img():
+    """桌面选一张启动图（png / jpg）；取消或无 tkinter 返回空串"""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        path = filedialog.askopenfilename(
+            title="选一张启动图（png / jpg / jpeg）",
+            filetypes=[("图片", "*.png *.jpg *.jpeg"),
+                       ("PNG", "*.png"), ("JPG", "*.jpg *.jpeg"),
                        ("所有文件", "*.*")])
         root.destroy()
         return path or ""
@@ -6163,6 +6198,12 @@ def settings_hitboxes(state):
                   "music_import", "导入曲子"))
     items.append((pygame.Rect(p.right - 100, p.y + 412, 72, 26),
                   "music_delete", "删曲"))
+    # v2.17 启动图：同一行中段还有空位，放「换启动图 / 复原」两个动作按钮。
+    # 手机上点「换启动图」会告诉你把图拷到哪；桌面直接弹文件对话框。
+    items.append((pygame.Rect(p.x + 112, p.y + 412, 96, 26),
+                  "boot_img", "换启动图"))
+    items.append((pygame.Rect(p.x + 214, p.y + 412, 62, 26),
+                  "boot_img_reset", "复原"))
     y = p.y + 532
     x = p.x + 26
     for label, val in UNDO_LIMITS:
@@ -6240,11 +6281,13 @@ def draw_settings_overlay(screen, state):
             continue
         on = active(cat, val)
         action_off = False          # 动作按钮是否置灰（比如没选中文件曲目时的「删曲」）
-        if cat in ("music_import", "music_delete"):
-            # 动作按钮，不是开关：白底绿边；「删曲」在没选中文件曲目时置灰
+        if cat in ("music_import", "music_delete", "boot_img", "boot_img_reset"):
+            # 动作按钮，不是开关：白底绿边；「删曲」「复原」在没东西可删时置灰
             if cat == "music_delete":
                 action_off = not (isinstance(state.get("bgm"), str)
                                   and has_music_file(state["bgm"]))
+            elif cat == "boot_img_reset":
+                action_off = not find_boot_img()
             draw_rect(screen, C((246, 250, 244)) if not action_off else C((242, 240, 234)),
                       rect, 0, 8)
             draw_rect(screen, C((34, 150, 96)) if not action_off else C((198, 192, 180)),
@@ -6395,6 +6438,12 @@ HELP_PARAS = [
     "内置四首古曲（高山流水 / 平沙落雁 / 渔舟唱晚 / 广陵散）"
     "在没有同名文件时用程序合成的旋律顶上。音效同理：音效 目录放 "
     "select.wav / 落子.wav / 吃子.wav / 将军.wav / 胜利.wav 即替换内置音效。",
+    "【换启动图】开机最早那一闪「楚汉象棋·一局定天下」是打进安装包的，装好后换不了；"
+    "但紧接着那段「中国象棋」四字印章入场动画可以自己换：把喜欢的图片命名成 启动图.png"
+    "（或 .jpg）放进程序目录，桌面也可在设置面板点「换启动图」直接挑一张，下次启动就铺在"
+    "印章底下；点「复原」或删掉该文件即回出厂图。不用重新打包，也不用改安装包。"
+    "手机上把图拷到 Android/data/org.songyq.xiangqi/files/ 这个目录即可，"
+    "和「导入曲子」是同一个地方，手机文件管理或数据线都能进去。",
     "【退出】按 Esc、点底部「返回」或点窗口关闭键都不会直接退出：浮层先关，"
     "对局先回主页；回到主页再点右下角「退出」才真正结束程序（手机上是回手机桌面）。",
     "【升级安装】手机换新版安装包时，系统若提示「签名不一致 / 无法覆盖安装」，"
@@ -6446,6 +6495,14 @@ def help_paras():
                  "吃子.wav / 将军.wav / 胜利.wav 即替换内置音效。")
         elif p.startswith("【导入】"):
             p = p.replace("或点「选文件」挑 棋谱 目录里的 .txt；", "")
+        elif p.startswith("【换启动图】"):
+            p = ("【换启动图】开机最早那一闪「楚汉象棋·一局定天下」是打进安装包的，装好后换不了；"
+                 "但紧接着那段「中国象棋」四字印章入场动画可以自己换：手机没有文件对话框，"
+                 "设置面板点「换启动图」会告诉你放哪——把喜欢的图片命名成 启动图.png（或 .jpg）"
+                 "拷到 Android/data/org.songyq.xiangqi/files/ 目录（和导入曲子同一个地方，"
+                 "手机文件管理或数据线选「文件传输」都能进去），重启就生效；"
+                 "点「复原」即删掉它、回出厂古典图。不用重新打包、不用重装，自己就能换。"
+                 "（部分机型也能直接放手机「下载」目录，程序会顺手找一下）")
         # 手机版把「电脑」都改口成「手机」：同一个手机里没有电脑这回事，
         # 只有「数据线连电脑」那句说的是真的电脑，先护住再换。
         p = p.replace("数据线连电脑", "\x00PC\x00")
@@ -6756,6 +6813,327 @@ class BootSplash:
             pygame.time.wait(12)
 
 
+# ---------------------------- v2.17 启动入场 ----------------------------
+def _event_types(*names):
+    """按名字取事件常量， pygame 2.5.2（安卓）与 2.6.1（桌面）都兼容。"""
+    out = []
+    for nm in names:
+        v = getattr(pygame, nm, None)
+        if isinstance(v, int):
+            out.append(v)
+    return tuple(out)
+
+
+# 所有「玩家输入」：安卓 SDL 会同时发 FINGER* 与映射出来的 MOUSE*，
+# 只拦鼠标就会漏掉最后那一下，这是 v2.16 连敲误触的根因。
+INPUT_DOWN_TYPES = _event_types(
+    "MOUSEBUTTONDOWN", "FINGERDOWN", "KEYDOWN", "JOYBUTTONDOWN")
+INPUT_UP_TYPES = _event_types(
+    "MOUSEBUTTONUP", "FINGERUP", "KEYUP", "JOYBUTTONUP")
+INPUT_MOVE_TYPES = _event_types(
+    "MOUSEMOTION", "FINGERMOTION", "MOUSEWHEEL", "MULTIGESTURE",
+    "TEXTINPUT", "TEXTEDITING")
+INPUT_ALL_TYPES = INPUT_DOWN_TYPES + INPUT_UP_TYPES + INPUT_MOVE_TYPES
+
+
+# ---------------- v2.17：主人能在手机上自己换的启动图 ----------------
+# presplash.png 是编进 APK 的 SDL 层闪屏，Python 还没起来就显示了，装好后
+# 不用 root / 不重新打包就改不了它。这里另开一个「运行期启动图」：把图片
+# 命名成 启动图.png 放到手机上能拷文件的目录，程序每次冷启动读它，铺在四字
+# 印章入场动画底下。删掉文件就回出厂古典图，换图不用连电脑、不用重新打包。
+BOOT_IMG_NAMES = ("启动图.png", "启动图.jpg", "启动图.jpeg")
+_BOOT_IMG_CACHE = {}
+_BOOT_FIND_CACHE = {"t": 0.0, "path": ""}
+
+
+def _invalidate_boot_img():
+    """换图 / 复原之后：清掉「找到的路径」和「已解码的画面」两份缓存。"""
+    _BOOT_IMG_CACHE.pop("v", None)
+    _BOOT_FIND_CACHE["t"] = 0.0
+
+
+def boot_img_dir():
+    """自定义启动图放哪儿：手机用外部可写目录（文件管理/数据线能直接拷），
+    桌面用程序目录。"""
+    ext = extern_files_dir()
+    return ext if (IS_ANDROID and ext) else _BASE_DIR
+
+
+def find_boot_img(refresh=False):
+    """按优先级找自定义启动图，找不到返回空串。
+    设置面板每帧都要问一次「有没有自定义图」，这里 0.4 秒缓存一下，
+    免得每帧去 stat 十几次；换图 / 复原会主动清缓存。"""
+    now = time.perf_counter()
+    if not refresh and now - _BOOT_FIND_CACHE["t"] < 0.4:
+        return _BOOT_FIND_CACHE["path"]
+    dirs = [boot_img_dir(), _BASE_DIR, _ASSET_DIR]
+    if IS_ANDROID:
+        # 有些手机的文件管理进不去 Android/data，顺手也看看公共目录。
+        # 读不到就静默跳过（无权限时 os.path.isfile 直接返回 False），不崩不报错。
+        ext = os.environ.get("EXTERNAL_STORAGE") or "/storage/emulated/0"
+        dirs += [os.path.join(ext, "Download"), os.path.join(ext, "DCIM"),
+                 os.path.join(ext, "Pictures"), ext]
+    path = ""
+    for d in dirs:
+        if not d or not os.path.isdir(d):
+            continue
+        for nm in BOOT_IMG_NAMES:
+            p = os.path.join(d, nm)
+            if os.path.isfile(p):
+                path = p
+                break
+        if path:
+            break
+    _BOOT_FIND_CACHE["t"] = now
+    _BOOT_FIND_CACHE["path"] = path
+    return path
+
+
+def load_boot_img():
+    """载入自定义启动图：居中裁切铺满逻辑画布，只做一次并缓存；
+    没有文件或图片坏了都返回 None，入场动画照走米色棋盘底，绝不挡启动。"""
+    if "v" in _BOOT_IMG_CACHE:
+        return _BOOT_IMG_CACHE["v"]
+    surf = None
+    path = find_boot_img()
+    if path:
+        try:
+            raw = pygame.image.load(path).convert()
+            w, h = raw.get_size()
+            # 手机照片动辄三四千万像素，先快速降到 1600 以内再精修，
+            # 免得换张大图就把启动拖慢（只影响这一帧，且已摊进动画里）。
+            if max(w, h) > 1600:
+                k = 1600.0 / max(w, h)
+                raw = pygame.transform.scale(raw, (max(1, int(w * k)),
+                                                   max(1, int(h * k))))
+                w, h = raw.get_size()
+            target = SCREEN_W / SCREEN_H
+            if w / h > target:                     # 画面过宽：居中竖裁
+                nw = max(1, int(h * target))
+                raw = raw.subsurface(((w - nw) // 2, 0, nw, h))
+            else:                                  # 画面过高：居中横裁
+                nh = max(1, int(w / target))
+                raw = raw.subsurface((0, (h - nh) // 2, w, nh))
+            surf = pygame.transform.smoothscale(raw, (SCREEN_W, SCREEN_H))
+        except (pygame.error, OSError, ValueError):
+            surf = None
+    _BOOT_IMG_CACHE["v"] = surf
+    return surf
+
+
+def import_boot_img(src):
+    """把选好的图收成 启动图.png（统一扩展名，避免几张图抢先后），
+    返回 (是否成功, 提示语)。桌面设置面板用。"""
+    if not src:
+        return False, "没有选文件，已取消换图。"
+    d = boot_img_dir()
+    if not d:
+        return False, "找不到可写目录，换图失败。"
+    try:
+        pygame.image.load(src)                  # 先确认能解码，别把坏图收进来
+        dst = os.path.join(d, "启动图.png")
+        shutil.copyfile(src, dst)
+        for nm in ("启动图.jpg", "启动图.jpeg"):
+            old = os.path.join(d, nm)
+            if os.path.exists(old):
+                os.remove(old)
+    except (pygame.error, OSError, ValueError) as exc:
+        return False, "换图失败：%s" % exc
+    _invalidate_boot_img()
+    return True, ("已存成 启动图.png，下次冷启动生效；点「复原」回出厂图。"
+                  "（桌面开机不播入场动画，这张图在手机版才看得见）")
+
+
+def remove_boot_img():
+    """恢复出厂启动图：删掉自定义文件并清缓存。"""
+    p = find_boot_img()
+    if not p:
+        return False, "现在用的就是出厂图，没有可删的自定义启动图。"
+    try:
+        os.remove(p)
+    except OSError as exc:
+        return False, "删不掉：%s" % exc
+    _invalidate_boot_img()
+    return True, "已恢复出厂古典启动图，下次启动生效。"
+
+
+def intro_seal_glyphs():
+    """四枚小篆字（透明底 → 白字），给入场动画用，比主页那枚印章大得多。"""
+    out = []
+    for ch in "中国象棋":
+        g = None
+        raw = _seal_image(ch)
+        if raw is not None:
+            try:
+                g = pygame.transform.smoothscale(raw.convert_alpha(), (76, 76))
+                g.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_MAX)
+            except (pygame.error, OSError, ValueError):
+                g = None
+        if g is None:
+            try:
+                g = load_font_song(64).render(ch, True, (252, 240, 212))
+            except Exception:
+                g = None
+        out.append(g)
+    return out
+
+
+def play_intro(screen, present, sounds, gate, busy=None, min_seconds=0.95,
+               max_seconds=1.5):
+    """「中国象棋」四字印章落位动画：把冷启动的等待变成看得见的过场。
+
+    - 四个字依次自上落下、缩放回弹，最后合成一枚朱红印章并淡出到主页；
+    - 每帧顺手做一件准备活（字体 / 主页背景 / 一段音效波形），主页首帧不再
+      一口气卡住 160ms 以上；
+    - 这段时间的输入一律吞掉，并按「按下 / 抬起」计数交给后面那段门禁，
+      连敲、按住不放、按下被吞抬手落窗外的跨界配对都算得清清楚楚；
+    - v2.17b：busy 只作兼容保留，动画时长不再等后台残局库。库改由主循环
+      门禁兜着，两者解耦后动画最坏情况从 2.4s 收到 1.5s，不会越等越慢。
+    """
+    t0 = time.perf_counter()
+    glyphs = None
+    font_small = None
+    steps = []
+    # 0 自定义启动图，1 字体，2 主页背景，3~9 七段音效，10 收尾。
+    # 读图/缩放也占一帧，别让第一帧一口气干完；读不到就走米色棋盘底。
+    steps.append(lambda: load_boot_img())
+    steps.append(lambda: (load_font_song(54), load_font_song(17), load_font(28),
+                          load_font(20), load_font_song(20)))
+    steps.append(lambda: (make_home_bg(), load_seal_glyphs()))
+    for i in range(len(_SOUND_BUILDERS)):
+        steps.append(lambda i=i: make_one_sound(sounds, i))
+    steps.append(lambda: finish_sounds(sounds))
+    step = 0
+    frame = 0
+    veil = pygame.Surface((SCREEN_W, SCREEN_H))
+    veil.fill(TH["bg"])
+    # 自定义启动图上压一层米色薄罩：印章、进度条、小字才不会被照片淹没
+    tint = pygame.Surface((SCREEN_W, SCREEN_H))
+    tint.set_alpha(96)
+    tint.fill((241, 219, 182))
+    cx, cy = SCREEN_W // 2, int(SCREEN_H * 0.44)
+    box = pygame.Rect(cx - 100, cy - 100, 200, 200)
+    cells = [(box.x + 12 + (i % 2) * 92, box.y + 12 + (i // 2) * 92)
+             for i in range(4)]
+
+    while True:
+        now = time.perf_counter()
+        t = now - t0
+        for ev in pygame.event.get():
+            if ev.type in INPUT_DOWN_TYPES:
+                gate["down"] += 1
+                gate["last"] = now
+            elif ev.type in INPUT_UP_TYPES:
+                gate["down"] = max(0, gate["down"] - 1)
+                gate["last"] = now
+            elif ev.type in INPUT_MOVE_TYPES:
+                gate["last"] = now
+            else:
+                # 退出 / 切后台 / 窗口事件不能吞，放回队列交给主循环
+                try:
+                    pygame.event.post(ev)
+                except pygame.error:
+                    pass
+        if frame == 0:
+            # 第一帧只画几何，字体这一帧才热，避免首帧等字体
+            pass
+        elif step < len(steps):
+            try:
+                steps[step]()
+            except Exception:
+                pass
+            step += 1
+        if glyphs is None and frame >= 1:
+            try:
+                glyphs = intro_seal_glyphs()
+            except Exception:
+                glyphs = [None] * 4
+        if font_small is None and frame >= 1:
+            try:
+                font_small = load_font_song(20)
+            except Exception:
+                font_small = None
+
+        # ---- 画面 ----
+        screen.fill(TH["bg"])
+        boot_img = _BOOT_IMG_CACHE.get("v")
+        if boot_img is not None:
+            screen.blit(boot_img, (0, 0))
+            screen.blit(tint, (0, 0))
+        draw_rect(screen, C((120, 86, 52)),
+                  pygame.Rect(14, 14, SCREEN_W - 28, SCREEN_H - 28), 2, 12)
+        draw_rect(screen, C((168, 128, 86)),
+                  pygame.Rect(20, 20, SCREEN_W - 40, SCREEN_H - 40), 1, 10)
+        # 淡棋盘水印（铺了自定义图就不画，免得细线压在画上显脏）
+        if boot_img is None:
+            for k in range(1, 9):
+                x = MARGIN + k * CELL
+                pygame.draw.line(screen, C((206, 184, 150)), (x, cy - 210), (x, cy + 210), 1)
+            for k in range(1, 7):
+                y = cy - 180 + k * 60
+                pygame.draw.line(screen, C((206, 184, 150)), (cx - 200, y), (cx + 200, y), 1)
+
+        # 印章底：四字全落定后描边、盖一下
+        landed = min(4, int(max(0.0, t - 0.12) / 0.16))
+        done_t = 0.12 + 3 * 0.16 + 0.28
+        if t >= done_t - 0.05:
+            k = min(1.0, max(0.0, (t - (done_t - 0.05)) / 0.18))
+            pop = 1.0 + 0.06 * (1 - k)
+            w = int(box.w * pop)
+            b = pygame.Rect(cx - w // 2, cy - w // 2, w, w)
+            draw_rect(screen, (176, 52, 48), b, 0, 8)
+            draw_rect(screen, (252, 240, 212), b.inflate(-10, -10), 2, 5)
+        for i in range(landed + (1 if 0 <= t - 0.12 - landed * 0.16 < 0.34 else 0)):
+            if i > 3:
+                break
+            start = 0.12 + i * 0.16
+            k = max(0.0, min(1.0, (t - start) / 0.30))
+            ease = 1 - (1 - k) ** 3
+            dy = int(-150 * (1 - ease))
+            sc = 1.22 - 0.22 * ease
+            g = (glyphs or [None] * 4)[i]
+            if g is None:
+                continue
+            try:
+                gg = pygame.transform.rotozoom(g, 0, sc) if abs(sc - 1) > 0.01 else g
+                gg.set_alpha(int(255 * min(1.0, k * 2.2)))
+                screen.blit(gg, (cells[i][0] + 44 - gg.get_width() // 2,
+                                 cells[i][1] + 44 - gg.get_height() // 2 + dy))
+            except (pygame.error, ValueError):
+                pass
+
+        # 进度条 + 提示
+        bar = pygame.Rect(cx - 130, cy + 150, 260, 6)
+        draw_rect(screen, C((214, 196, 166)), bar, 0, 3)
+        prog = min(1.0, max(0.05, t / min_seconds))
+        draw_rect(screen, (176, 52, 48),
+                  pygame.Rect(bar.x, bar.y, max(6, int(bar.w * prog)), bar.h), 0, 3)
+        if font_small:
+            try:
+                tip = font_small.render("正在摆局，请稍候", True, C((112, 84, 58)))
+                screen.blit(tip, (cx - tip.get_width() // 2, cy + 170))
+                ver = font_small.render("中国象棋 · 智算单机版 v%s" % VERSION,
+                                        True, C((132, 106, 78)))
+                screen.blit(ver, (cx - ver.get_width() // 2, SCREEN_H - 76))
+            except (pygame.error, AttributeError):
+                pass
+
+        # 收尾淡出到主页底色，衔接不硬切
+        if t > min_seconds - 0.22:
+            k = min(1.0, (t - (min_seconds - 0.22)) / 0.22)
+            veil.set_alpha(int(255 * k))
+            screen.blit(veil, (0, 0))
+        present()
+        frame += 1
+        pygame.time.wait(12)
+        ready = step >= len(steps)
+        # 只按「准备活做完 + 最短时长」收尾，不被后台任务拖长。
+        if (t >= min_seconds and ready) or t >= max_seconds:
+            break
+    gate["last"] = max(gate["last"], time.perf_counter() - 0.34)
+    return frame
+
+
 def bg_prepare(fn, splash=None, msg=None):
     """把耗时的准备活丢到后台线程，主线程继续转动画，结束再把结果 / 异常交回来。
     异常原样抛回主线程，不在后台悄悄吞掉。"""
@@ -6830,7 +7208,10 @@ def main():
     try:
         if pygame.mixer.get_init() is None:
             pygame.mixer.init(SAMPLE_RATE, -16, 2, 512)
-        sounds = build_sounds()
+        # v2.17：安卓不在启动路上合成波形，交给入场动画每帧建一段；
+        # 桌面窗口一闪就开，这里一次性建好，音量设置才能立刻作用上去。
+        if not IS_ANDROID:
+            sounds = build_sounds()
     except (pygame.error, OSError) as exc:
         print("音效初始化失败，将以静音运行：%s" % exc)
 
@@ -7772,6 +8153,25 @@ def main():
                             ok, msg = import_music_file(pick_music_file())
                             S["settings_msg"] = msg
                             beep("select" if ok else "illegal")
+                    elif cat == "boot_img":
+                        # v2.17：手机上没文件对话框，告诉他把图拷到哪；桌面直接选图。
+                        # 换完不必重装，下次冷启动入场动画底下就铺这张图。
+                        if IS_ANDROID:
+                            d = extern_files_dir() or "Android/data/org.songyq.xiangqi/files"
+                            cur = find_boot_img(refresh=True)
+                            S["settings_msg"] = (
+                                "图命名 启动图.png 放 %s，重启生效。%s"
+                                % (d, "现在已在用自己的图，点「复原」可回出厂图。"
+                                   if cur else "当前是出厂古典图。"))
+                            beep("illegal")
+                        else:
+                            ok, msg = import_boot_img(pick_boot_img())
+                            S["settings_msg"] = msg
+                            beep("select" if ok else "illegal")
+                    elif cat == "boot_img_reset":
+                        ok, msg = remove_boot_img()
+                        S["settings_msg"] = msg
+                        beep("select" if ok else "illegal")
                     elif cat == "music_delete":
                         # 删曲只删「当前选中」那一首，而且只删曲 目录里的文件；
                         # 内置古曲删不掉（程序合成的，删了没得听）。点两次才真删。
@@ -8279,26 +8679,41 @@ def main():
 
     if boot:
         boot.finish()          # （v2.11 起 boot 恒为 None，保留此分支给旧调用兜底）
-    # 残局库丢后台读：主循环第一帧就能画出主页，字号扫描 / 棋盘预渲染也不必等它
-    start_library_load()
-    # v2.13：启动这段时间里敲屏幕攒下的事件一律丢掉。否则主循环第一帧会一次
-    # 收到几十个 MOUSEBUTTONDOWN，既误触菜单，又把 sync_library 的等待压到主线程，
-    # 系统判定无响应就直接杀掉进程（表现就是「连敲几下就闪退」）。
-    try:
-        pygame.event.clear()
-    except pygame.error:
-        pass
 
-    # v2.14：先把主页画出来再进主循环。原来第一帧要等事件、计时、音乐都跑一遍，
-    # 安卓上就是一小段黑屏，用户以为还没启动、连敲屏幕，正好点进菜单。
-    # 现在先画一帧，随后 0.9 秒内的触摸一律丢掉，主页露脸之前/刚露脸时的误触
-    # 不会再把玩家带进对战。
+    # ---------------- v2.17 启动入场 + 输入门禁 ----------------
+    # 旧版是「固定 0.9 秒只拦 MOUSE*」。安卓 SDL 一次触摸会同时报 FINGER* 和
+    # MOUSE*，漏掉的 FINGERDOWN 就是连敲最后一下跑进菜单的原因；固定时长也挡不住
+    # 「按住不放」「按下被吞、抬手落在窗口外」这类跨界配对。
+    # 现在改成两段：SDL 闪屏（古典图）→ 四字印章入场动画 → 主页；动画里把字体、
+    # 主页背景、印章字形、七段音效波形分摊到每帧做（残局库仍旧后台读），
+    # 等待看得见也不卡主线程，且动画时长固定，不会被后台任务越拖越长。
+    # 动画结束再按「还有没有手指没抬 / 最后一次输入后静默多久」决定放不放行。
+    input_gate = {"down": 0, "last": 0.0}
+    gate_deadline = 0.0
+    start_library_load()
+    if IS_ANDROID:
+        try:
+            play_intro(screen, present, sounds, input_gate,
+                       min_seconds=0.95, max_seconds=1.5)
+        except Exception:
+            # 入场动画只是过场，任何字体 / 素材意外都不该挡住进主页
+            pass
+        try:
+            apply_volumes()    # 音效是在动画里逐帧建的，这里补一次音量
+        except Exception:
+            pass
+        gate_deadline = time.perf_counter() + 2.2
+    else:
+        try:
+            pygame.event.clear()
+        except pygame.error:
+            pass
+    # 先把主页画出来再进主循环，避免第一帧还要等计时 / 音乐跑一遍才露脸
     try:
         draw_home(screen, S["bgm"])
         present()
     except (pygame.error, AttributeError):
         pass
-    boot_guard_until = time.perf_counter() + 0.9
 
     def sync_library():
         """用主循环里唯一的等待点：真的还没读完时，一主线程 join，最多闪一下。"""
@@ -8365,21 +8780,45 @@ def main():
         # ---- 事件 ----
         # ---- 事件（窗口缩放时把鼠标坐标换算回逻辑画布坐标） ----
         events = pygame.event.get()
-        if IS_ANDROID and library_loading():
-            # 后台还在整理残局库：这期间只放行退出与窗口事件，其余连点全吞掉，
-            # 既不误触菜单，也不会让主线程 join 后台线程造成无响应。
-            _wev = getattr(pygame, "WINDOWEVENT", None)
-            _keep = {pygame.QUIT}
-            if _wev is not None:
-                _keep.add(_wev)
+        # ---- v2.17 启动输入门禁 ----
+        # 安卓一次触摸会同时产生 FINGER* 与 MOUSE*，旧版只拦 MOUSE* 才漏了最后一下。
+        # 这里把「按下 / 抬起 / 移动 / 按键 / 滚轮 / 手势」全算进来：只要还有未配对
+        # 的按下、或最后一次输入后没静默够 0.55 秒、或残局库还在后台读，玩家输入
+        # 一律吞掉；退出键、QUIT、窗口事件始终放行，门禁最多 2.2 秒，不会把人锁死。
+        if IS_ANDROID:
+            _now = time.perf_counter()
             _back = getattr(pygame, "K_AC_BACK", -999)
-            events = [ev for ev in events
-                      if ev.type in _keep
-                      or (ev.type == pygame.KEYDOWN and ev.key == _back)]
-        if IS_ANDROID and time.perf_counter() < boot_guard_until:
-            # 主页刚出来这一小段：启动时连敲攒下的点按全部丢掉，免得误入对战 / 残局
-            _ptr = (pygame.MOUSEBUTTONDOWN, pygame.MOUSEBUTTONUP, pygame.MOUSEMOTION)
-            events = [ev for ev in events if ev.type not in _ptr]
+            _gating = (_now < gate_deadline and
+                       (input_gate["down"] > 0
+                        or _now - input_gate["last"] < 0.55
+                        or library_loading()))
+            if _gating:
+                for _ev in events:
+                    if _ev.type in INPUT_DOWN_TYPES:
+                        if not (_ev.type == pygame.KEYDOWN
+                                and getattr(_ev, "key", None) == _back):
+                            input_gate["down"] += 1
+                        input_gate["last"] = _now
+                    elif _ev.type in INPUT_UP_TYPES:
+                        input_gate["down"] = max(0, input_gate["down"] - 1)
+                        input_gate["last"] = _now
+                    elif _ev.type in INPUT_MOVE_TYPES:
+                        input_gate["last"] = _now
+                events = [ev for ev in events
+                          if ev.type not in INPUT_ALL_TYPES
+                          or (ev.type == pygame.KEYDOWN
+                              and getattr(ev, "key", None) == _back)]
+            elif library_loading():
+                # 门禁到点但后台还没读完：仍只放行退出 / 窗口 / 返回键，
+                # 不让主线程 join 后台线程造成无响应。
+                _wev = getattr(pygame, "WINDOWEVENT", None)
+                _keep = {pygame.QUIT}
+                if _wev is not None:
+                    _keep.add(_wev)
+                events = [ev for ev in events
+                          if ev.type in _keep
+                          or (ev.type == pygame.KEYDOWN
+                              and getattr(ev, "key", None) == _back)]
         if events and not S.get("lib_ready"):
             sync_library()          # 此时后台通常已读完，立即返回，不阻塞
         try:
