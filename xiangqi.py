@@ -2,6 +2,19 @@
 # pyright: reportMissingImports=false
 """中国象棋 · 智算单机版（Pygame 版）
 
+v2.18 改动（主人实测反馈）：
+  1) 手机取消「中国象棋」四字印章入场动画：手机上被 SDL 闪屏盖住根本看不见，
+     却白等 0.95~1.5 秒。现在闪屏古典图之后直接进主页，这段等待整个没有了。
+  2) 音效波形不再在启动路上合成：改成第一次真正要响才按个生成，
+     冷启动少做 7 段波形（约 160ms 起，手机上更久）。
+  3) 启动输入门禁重排：动画取消后补 0.65 秒硬吞窗口保住连敲防护，
+     总门禁由 2.2 秒收到 1.8 秒；退出 / 返回键始终放行。
+  4) 设置面板按屏高整体放大：按钮高度手机 50、桌面 34，标签 24px / 19px、
+     按钮字 22px / 17px，按钮按面板宽度均分，手指好点；命中区与画面共用同一套
+     布局数据，不会出现「画得大、点得小」。
+  5) 手机上不好用的「导入曲子 / 删曲 / 换启动图 / 复原」四个入口全部取消；
+     内置古曲直接给足 5 首，新增《梁祝》，开机就能选，不用连电脑拷文件。
+
 v2.5 手机专版改动：
   1) 界面按屏幕自动分两套：启动探针量一次真实分辨率，短边 ≥720 物理像素就走
      「手机放大版」——顶栏按钮 32 高、底栏 36 高、主页按钮加高加大，字号提一档；
@@ -523,17 +536,17 @@ def load_font(size):
 
 
 # ---------------------------- 版本 / 创作者 / 设置项 ----------------------------
-VERSION = "2.17"
+VERSION = "2.18"
 APP_NAME = "中国象棋-智算单机版"
 CREATOR = "songyq"     # 主页右下角标注；
 TIME_OPTIONS = [5, 10, 20, 30, 60]    # 对战时间（分钟）
 MOVE_TIME_OPTIONS = [0, 15, 30, 60]   # 单步限时（秒），0 = 不限时（只在圆表上正计时）
 HOME_CREDIT_DX = 26                   # 主页落款「制作人」向左提一格的距离（px）
-# 内置合成古曲（曲 目录里没有同名音频时用这些合成旋律兜底）
-BGM_CORE = ["高山流水", "平沙落雁", "渔舟唱晚", "广陵散"]
+# 内置合成古曲（v2.18：手机上换曲子太麻烦，导入 / 删曲入口取消，直接多带一首《梁祝》）
+BGM_CORE = ["高山流水", "平沙落雁", "渔舟唱晚", "广陵散", "梁祝"]
 BGM_NAMES = BGM_CORE          # 兼容旧引用；实际可用曲目请用 bgm_names()
 BGM_MAX = 8                   # 设置面板最多列 8 个曲目（2 行 × 4）
-MUSIC_MAX_FILES = 4           # 曲 目录里最多收 4 首自己导入的曲子
+MUSIC_MAX_FILES = 4           # 曲 目录里最多收 4 首自己放进去的曲子（不再提供界面入口）
 LIB_CATEGORIES = ["全部", "经典残局", "江湖排局", "自定残局", "收藏"]
 CUSTOM_CATEGORY = "自定残局"      # 对战 / 摆棋里存下来的局面默认归到这里
 UNDO_LIMITS = [("不限", 0), ("三次", 3), ("五次", 5)]
@@ -603,6 +616,18 @@ BGM_TRACKS = {
         (5, 1), (4, 0.5), (2, 0.5), (4, 1.5), (2, 0.5),
         (0, 1), (2, 0.5), (0, 3),
     ]),
+    # 梁祝（v2.18 新增）：爱情主题的婉转上行与回落，收在长音上；
+    # 全部落在五声音阶里，跟另外四首的音色一致，不依赖外部音频文件。
+    "梁祝": _make_track([
+        (7, 1), (8, 0.5), (9, 0.5), (10, 1), (11, 0.5), (10, 0.5),
+        (9, 1), (8, 0.5), (7, 0.5), (8, 2), (5, 0.5),
+        (7, 1), (8, 0.5), (9, 0.5), (10, 1.5), (9, 0.5), (8, 1),
+        (7, 0.5), (6, 0.5), (5, 2), (5, 0.5),
+        (9, 1), (10, 0.5), (11, 0.5), (12, 1), (11, 0.5), (10, 0.5),
+        (9, 1.5), (8, 0.5), (9, 1), (8, 0.5), (7, 0.5),
+        (7, 1), (6, 0.5), (5, 0.5), (7, 1), (8, 0.5), (9, 0.5),
+        (8, 2), (7, 1), (5, 3),
+    ], beat=0.52),
 }
 BGM_CHANNEL = 1
 
@@ -2063,8 +2088,8 @@ def load_user_music(name):
     return snd
 
 
-# v2.17：波形合成表。启动时这 8 段要 160ms 左右（手机上更久），
-# 现在拆成「入场动画每帧做一段」，主线程不再一口气卡住。
+# v2.17：波形合成表。v2.18 起启动路上一律不合成 —— 手机入场动画取消后，
+# 没有「每帧做一段」的过场可借，改为第一次真正要响时按个生成（见 ensure_sound）。
 _SOUND_BUILDERS = (
     ("select",  lambda: _build_wave([(1100, 0.045, 70)], 0.20)),
     ("move",    lambda: _build_wave([(520, 0.07, 45)], 0.42, noise=0.55)),
@@ -2121,9 +2146,47 @@ def build_sounds():
 SOUND_NAMES = ("select", "move", "move_a", "move_b", "move_c",
                 "capture", "check", "win", "lose", "illegal")
 
+# v2.18：启动路上一律不合成波形。音效改成「第一次要响才按个生成」——
+# 外置音频优先，找不到才现合成那一段；生成时套用当前音量。
+_SOUND_BUILD_MAP = dict(_SOUND_BUILDERS)
+_SOUND_TO_BASE = {"move_a": "move", "move_b": "move", "move_c": "move"}
+_SOUND_VOL = {"v": DEFAULT_SOUND_VOL}
+
+
+def ensure_sound(sounds, name):
+    """按名取音效；字典里没有就现做一个，返回 Sound 或 None。"""
+    snd = sounds.get(name)
+    if snd is not None:
+        return snd
+    base = _SOUND_TO_BASE.get(name, name)
+    snd = sounds.get(base)
+    if snd is None:
+        path = find_audio(SFX_DIR, (base,) + SFX_ALIASES.get(base, ()))
+        if path:
+            try:
+                snd = pygame.mixer.Sound(path)
+            except (pygame.error, OSError):
+                snd = None
+        if snd is None:
+            fn = _SOUND_BUILD_MAP.get(base)
+            if fn is not None:
+                try:
+                    snd = pygame.mixer.Sound(buffer=fn())
+                except (pygame.error, OSError, ValueError):
+                    snd = None
+    if snd is None:
+        return None
+    try:
+        snd.set_volume(_SOUND_VOL["v"])
+    except (pygame.error, AttributeError):
+        pass
+    sounds[base] = snd
+    sounds[name] = snd
+    return snd
+
 
 def play(sounds, name):
-    snd = sounds.get(name)
+    snd = ensure_sound(sounds, name)
     if snd is not None:
         snd.play()
 
@@ -5475,12 +5538,97 @@ SETTINGS_PANEL = pygame.Rect(OVERLAY_PANEL.x, 70, OVERLAY_PANEL.w, 660)
 SETTINGS_CLOSE = pygame.Rect(SETTINGS_PANEL.right - 42, SETTINGS_PANEL.y + 12, 30, 30)
 
 
-def settings_slider_rects(p=None):
-    """音效 / 音乐两条音量滑块的点击区（也用于绘制）"""
-    p = p or SETTINGS_PANEL
-    y = p.y + 240
-    return (pygame.Rect(p.x + 96, y - 8, 140, 24),
-            pygame.Rect(p.x + 336, y - 8, 140, 24))
+def settings_layout(state=None):
+    """设置浮层的唯一布局源：命中检测与画面共用，放大后不会「画得大、点得小」。
+
+    v2.18：
+      - 标签改放在按钮行左侧，省掉每组一整行标签高度，行高全让给按钮：
+        手机按钮高 50 上下、标签 24px、按钮字 22px，拇指点得准；
+      - 按可用屏高整体缩放，小屏也不会挤出面板；
+      - 主人反馈「手机上不好换曲子和图」，故删掉「导入曲子 / 删曲 /
+        换启动图 / 复原」四个入口，只保留直接能点的开关与曲目。
+    """
+    p = SETTINGS_PANEL
+    if UI_BIG:
+        base = dict(f_title=34, f_label=24, f_btn=22, f_small=18, f_tip=16,
+                    title_h=56, btn_h=50, gap=12, tip_h=34, pad=22,
+                    col_gap=8, lab_w=70)
+    else:
+        base = dict(f_title=28, f_label=19, f_btn=17, f_small=14, f_tip=13,
+                    title_h=44, btn_h=34, gap=8, tip_h=26, pad=22,
+                    col_gap=6, lab_w=56)
+
+    names = bgm_names()[:BGM_MAX]
+    track_rows = max(1, (len(names) + 3) // 4)
+    rows = 7 + 1 + track_rows          # 7 个选项组 + 音量行 + 曲目行
+
+    def height(v):
+        return (v["title_h"] + rows * (v["btn_h"] + v["gap"])
+                + v["f_small"] + 4 + v["tip_h"] + 2 * v["pad"])
+
+    k = max(0.74, min(1.12, (SCREEN_H - 72) / float(max(1, height(base)))))
+    v = {key: max(1, int(round(val * k))) for key, val in base.items()}
+    ph = min(height(v), SCREEN_H - 36)
+    panel = pygame.Rect(p.x, max(16, (SCREEN_H - ph) // 2 - 6), p.w, ph)
+
+    pad, col_gap, lab_w = v["pad"], v["col_gap"], v["lab_w"]
+    avail_w = panel.w - 2 * pad
+    btn_w = avail_w - lab_w
+    y = panel.y + pad + v["title_h"]
+    items, labels, sliders = [], [], []
+    close = pygame.Rect(panel.right - v["btn_h"] - pad, panel.y + 8,
+                        v["btn_h"], v["btn_h"])
+
+    def lab(text, yy, small=False, x=None):
+        size = v["f_small"] if small else v["f_label"]
+        labels.append((text, panel.x + pad if x is None else x,
+                       yy + max(0, (v["btn_h"] - size) // 2), size, small))
+
+    def row(values, cat, cols=None, full=False):
+        n = cols or max(1, len(values))
+        x0 = panel.x + pad if full else panel.x + pad + lab_w
+        w = max(20, ((avail_w if full else btn_w) - (n - 1) * col_gap) // n)
+        for i, val in enumerate(values):
+            items.append((pygame.Rect(x0 + i * (w + col_gap), y, w, v["btn_h"]),
+                          cat, val))
+
+    def group(text, values, cat, cols=None):
+        nonlocal y
+        lab(text, y)
+        row(values, cat, cols=cols)
+        y += v["btn_h"] + v["gap"]
+
+    group("难度", ["简单", "普通", "困难", "大师"], "difficulty")
+    group("音效", [True, False], "sound")
+    group("音乐", [True, False], "bgm_on")
+
+    # 音量行：上方两个小标签 + 两条滑块；滑块命中区与按钮一样高，手指好拖
+    sw = (avail_w - col_gap) // 2
+    labels.append(("音效音量", panel.x + pad, y, v["f_small"], True))
+    labels.append(("音乐音量", panel.x + pad + sw + col_gap, y,
+                   v["f_small"], True))
+    yy = y + v["f_small"] + 4
+    s_rect = pygame.Rect(panel.x + pad, yy, sw, v["btn_h"])
+    m_rect = pygame.Rect(panel.x + pad + sw + col_gap, yy, sw, v["btn_h"])
+    items.append((s_rect, "vol_sound", None))
+    items.append((m_rect, "vol_music", None))
+    sliders.extend((s_rect, m_rect))
+    y = yy + v["btn_h"] + v["gap"]
+
+    group("时长", TIME_OPTIONS, "time")
+    group("单步", MOVE_TIME_OPTIONS, "move_time")
+
+    for r in range(track_rows):
+        lab("曲目" if r == 0 else "", y)
+        row(names[r * 4:(r + 1) * 4], "bgm", cols=4)
+        y += v["btn_h"] + v["gap"]
+
+    group("悔棋", [val for _, val in UNDO_LIMITS], "undo")
+    group("配色", THEME_NAMES, "theme")
+    items.append((close, "close", None))
+
+    return dict(panel=panel, close=close, items=items, labels=labels,
+                sliders=tuple(sliders), tip_y=y, v=v, names=names)
 
 _ASSET_DIR = _res_dir()
 _HOME_CACHE = {}
@@ -6153,104 +6301,44 @@ def draw_home(screen, bgm_name, hover=None):
 
 
 def settings_hitboxes(state):
-    """返回 ([(rect, 类别, 值), ...], panel)"""
-    p = SETTINGS_PANEL
-    items = []
-    y = p.y + 74
-    x = p.x + 26
-    for val in ["简单", "普通", "困难", "大师"]:
-        items.append((pygame.Rect(x, y, 64, 30), "difficulty", val))
-        x += 72
-    y = p.y + 136
-    x = p.x + 26
-    for val, b in [("开", True), ("关", False)]:
-        items.append((pygame.Rect(x, y, 64, 30), "sound", b))
-        x += 72
-    # 背景音乐开关：紧接在音效开关下方，同样「开 / 关」两键
-    y = p.y + 198
-    x = p.x + 26
-    for val, b in [("开", True), ("关", False)]:
-        items.append((pygame.Rect(x, y, 64, 30), "bgm_on", b))
-        x += 72
-    # 音量滑块（点击或拖动轨道）
-    s_rect, m_rect = settings_slider_rects(p)
-    items.append((s_rect, "vol_sound", None))
-    items.append((m_rect, "vol_music", None))
-    y = p.y + 322
-    x = p.x + 26
-    for m in TIME_OPTIONS:
-        items.append((pygame.Rect(x, y, 66, 30), "time", m))
-        x += 74
-    # 单步限时（秒）：只影响圆表计时与超时判定，不改变总包干时间
-    y = p.y + 380
-    x = p.x + 26
-    for m in MOVE_TIME_OPTIONS:
-        items.append((pygame.Rect(x, y, 66, 30), "move_time", m))
-        x += 74
-    # 曲目：每行 4 个、最多 BGM_MAX 个（曲 目录里放几首就多几个，自动换行）
-    y = p.y + 438
-    for i, name in enumerate(bgm_names()[:BGM_MAX]):
-        col, row = i % 4, i // 4
-        items.append((pygame.Rect(p.x + 26 + col * 100, y + row * 32, 96, 30),
-                      "bgm", name))
-    # 导入 / 删曲：放在「背景古曲」标题那一行的右端，曲目行保持一行 4 个
-    items.append((pygame.Rect(p.right - 194, p.y + 412, 84, 26),
-                  "music_import", "导入曲子"))
-    items.append((pygame.Rect(p.right - 100, p.y + 412, 72, 26),
-                  "music_delete", "删曲"))
-    # v2.17 启动图：同一行中段还有空位，放「换启动图 / 复原」两个动作按钮。
-    # 手机上点「换启动图」会告诉你把图拷到哪；桌面直接弹文件对话框。
-    items.append((pygame.Rect(p.x + 112, p.y + 412, 96, 26),
-                  "boot_img", "换启动图"))
-    items.append((pygame.Rect(p.x + 214, p.y + 412, 62, 26),
-                  "boot_img_reset", "复原"))
-    y = p.y + 532
-    x = p.x + 26
-    for label, val in UNDO_LIMITS:
-        items.append((pygame.Rect(x, y, 62, 30), "undo", val))
-        x += 70
-    y = p.y + 590
-    x = p.x + 26
-    for name in THEME_NAMES:
-        items.append((pygame.Rect(x, y, 76, 30), "theme", name))
-        x += 84
-    items.append((SETTINGS_CLOSE, "close", None))
-    return items, p
+    """返回 ([(rect, 类别, 值), ...], panel)。
+    v2.18：全部取自 settings_layout()，与画面上的按钮一一对应。"""
+    lay = settings_layout(state)
+    return lay["items"], lay["panel"]
 
 
 def draw_settings_overlay(screen, state):
+    lay = settings_layout(state)
+    p, v = lay["panel"], lay["v"]
     shade = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
     shade.fill((0, 0, 0, 130))
     screen.blit(shade, (0, 0))
-    p = SETTINGS_PANEL
     draw_rect(screen, C((252, 249, 242)), p, 0, 14)
     draw_rect(screen, C((34, 150, 96)), p, 2, 14)
-    t = load_font_song(24).render("设　置", True, C((60, 48, 36)))
-    screen.blit(t, (p.centerx - t.get_width() // 2, p.y + 30))
-    draw_rect(screen, C((232, 214, 208)), SETTINGS_CLOSE, 0, 6)
-    cross = load_font(18).render("×", True, C((168, 60, 54)))
-    screen.blit(cross, (SETTINGS_CLOSE.centerx - cross.get_width() // 2,
-                        SETTINGS_CLOSE.centery - cross.get_height() // 2))
-    lfont = load_font(17)
-    sfont = load_font(14)
-    for y, text in [(p.y + 50, "对战难度"), (p.y + 112, "音效开关"),
-                    (p.y + 174, "背景音乐开关"), (p.y + 298, "对战时间（分钟）"),
-                    (p.y + 356, "单步限时（秒）"),
-                    (p.y + 414, "背景古曲"), (p.y + 508, "悔棋限制"),
-                    (p.y + 566, "棋盘配色")]:
-        screen.blit(lfont.render(text, True, C((78, 64, 50))), (p.x + 24, y))
-    # 音量滑块标签
-    screen.blit(sfont.render("音效音量", True, C((96, 82, 66))), (p.x + 24, p.y + 232))
-    screen.blit(sfont.render("音乐音量", True, C((96, 82, 66))), (p.x + 262, p.y + 232))
-    # 曲目小提示：曲目录里有几首（有上限）、没文件的曲目用内置合成音
+    t = load_font_song(v["f_title"]).render("设　置", True, C((60, 48, 36)))
+    screen.blit(t, (p.centerx - t.get_width() // 2,
+                    p.y + v["pad"] + max(0, (v["title_h"] - t.get_height()) // 2)))
+    close = lay["close"]
+    draw_rect(screen, C((232, 214, 208)), close, 0, max(6, close.w // 5))
+    cross = load_font(max(20, v["f_label"])).render("×", True, C((168, 60, 54)))
+    screen.blit(cross, (close.centerx - cross.get_width() // 2,
+                        close.centery - cross.get_height() // 2))
+    # 分组标题与音量小标签：位置同样来自 layout，字随面板一起放大
+    for text, x, y, size, small in lay["labels"]:
+        font = load_font(size)
+        col = C((96, 82, 66)) if small else C((78, 64, 50))
+        screen.blit(font.render(text, True, col), (x, y))
+
+    # 曲目小提示：内置几首、曲目录里另有几首（不再提供导入 / 删曲入口）
     n_music = len(music_library())
-    tip = "曲目录 %d/%d 首：绿框是文件（选中后点「删曲」），灰框是合成" % (
-        n_music, MUSIC_MAX_FILES)
+    tip = "内置 %d 首古曲（含《梁祝》）" % len(BGM_CORE)
+    if n_music:
+        tip += "，曲目录另有 %d 首" % n_music
     if len(bgm_names()) > BGM_MAX:
         tip += "　只看前 %d 首" % BGM_MAX
 
-    items, _ = settings_hitboxes(state)
-    bfont = load_font(14)
+    items = lay["items"]
+    bfont = load_font(v["f_btn"])
 
     def active(cat, val):
         if cat == "difficulty":
@@ -6280,19 +6368,7 @@ def draw_settings_overlay(screen, state):
                                          else "music_vol", 0.8))
             continue
         on = active(cat, val)
-        action_off = False          # 动作按钮是否置灰（比如没选中文件曲目时的「删曲」）
-        if cat in ("music_import", "music_delete", "boot_img", "boot_img_reset"):
-            # 动作按钮，不是开关：白底绿边；「删曲」「复原」在没东西可删时置灰
-            if cat == "music_delete":
-                action_off = not (isinstance(state.get("bgm"), str)
-                                  and has_music_file(state["bgm"]))
-            elif cat == "boot_img_reset":
-                action_off = not find_boot_img()
-            draw_rect(screen, C((246, 250, 244)) if not action_off else C((242, 240, 234)),
-                      rect, 0, 8)
-            draw_rect(screen, C((34, 150, 96)) if not action_off else C((198, 192, 180)),
-                      rect, 1, 8)
-        elif cat == "bgm":
+        if cat == "bgm":
             real = has_music_file(val)
             draw_rect(screen, C((34, 150, 96)) if on else
                       (C((244, 240, 232)) if real else C((250, 246, 238))), rect, 0, 8)
@@ -6301,12 +6377,12 @@ def draw_settings_overlay(screen, state):
             else:
                 edge = C((34, 150, 96)) if real else C((196, 186, 170))
             draw_rect(screen, edge, rect, 2 if real else 1, 8)
-            dot = (rect.right - 9, rect.y + 9)      # 右上角：实心＝曲 目录里的文件
+            dot = (rect.right - 11, rect.y + 11)    # 右上角：实心＝曲 目录里的文件
             if real:
-                pygame.draw.circle(screen, K((255, 255, 255)) if on else C((34, 150, 96)), dot, 3)
+                pygame.draw.circle(screen, K((255, 255, 255)) if on else C((34, 150, 96)), dot, 4)
             else:
                 pygame.draw.circle(screen, K((255, 255, 255)) if on else C((176, 166, 150)),
-                                   dot, 3, 1)
+                                   dot, 4, 1)
         else:
             draw_rect(screen, C((34, 150, 96)) if on else C((250, 246, 238)), rect, 0, 8)
             draw_rect(screen, C((34, 150, 96)) if on else C((196, 186, 170)), rect, 1, 8)
@@ -6319,10 +6395,7 @@ def draw_settings_overlay(screen, state):
         else:
             label = str(val)
         col = K((255, 255, 255)) if on else C((86, 74, 60))
-        if action_off:
-            col = C((168, 160, 146))
-        surf = (fit_text(label, bfont, rect.w - 18, col) if cat == "bgm"
-                else bfont.render(label, True, col))
+        surf = fit_text(label, bfont, rect.w - 12, col)
         screen.blit(surf, (rect.centerx - surf.get_width() // 2,
                            rect.centery - surf.get_height() // 2))
 
@@ -6330,8 +6403,8 @@ def draw_settings_overlay(screen, state):
     msg = str(state.get("settings_msg") or "")
     line = msg or tip
     color = C((34, 150, 96)) if msg else C((150, 138, 122))
-    ms = fit_text(line, load_font(12), p.w - 52, color)
-    screen.blit(ms, (p.x + 26, p.y + 620))
+    ms = fit_text(line, load_font(v["f_tip"]), p.w - 2 * v["pad"], color)
+    screen.blit(ms, (p.x + v["pad"], lay["tip_y"]))
 
 
 def draw_volume_slider(screen, rect, value):
@@ -6361,11 +6434,11 @@ HELP_PARAS = [
     "欢迎使用《中国象棋·智算单机版 v%s》—— 计时对弈与残局研究。" % VERSION,
     "【两个版本】同一份程序，规则、AI、残局库、按钮文案完全一致，只在「怎么操作」上各让一步。"
     "安卓版：竖屏全屏、手指点选；底栏排成两排——上排 悔棋/提示/复盘/存局/返回主菜单，"
-    "下排 认输/提和/棋谱/重开，格子比桌面版大一号，拇指够得着；冷启动有一段开机动画，"
-    "棋子在转，等的时候不干等；设置、残局库、曲子都存在应用私有目录，不占相册、不用存储权限；"
-    "设置里能直接导入曲子、删曲子，不用连电脑。"
-    "桌面版：窗口可缩放，鼠标右键摆棋删子；导入曲子走系统文件对话框，能一次挑好几个文件；"
-    "键盘 Esc 关浮层、回车确认；存档、棋谱、曲目录都在 exe 旁边，拷走就能搬去另一台机器。"
+    "下排 认输/提和/棋谱/重开，格子比桌面版大一号，拇指够得着；开机闪一张古典图就直接进主页，"
+    "不再放看不见的过场动画；设置、残局库都存在应用私有目录，不占相册、不用存储权限；"
+    "内置 5 首古曲（含《梁祝》），设置里点一下就能换，不用连电脑。"
+    "桌面版：窗口可缩放，鼠标右键摆棋删子；键盘 Esc 关浮层、回车确认；"
+    "存档、棋谱都在 exe 旁边，拷走就能搬去另一台机器。"
     "一句话：手机上胜在随手就能下，桌面上胜在摆棋、整理谱子方便。",
     "【对战】红方先行：点棋子再点落点，绿点可走、红圈可吃；电脑执黑，每方限时包干。"
     "轮到哪方走，他的将/帅旁边就亮起一只单步计时圆表：十二个刻度像座钟，指针一圈"
@@ -6430,20 +6503,16 @@ HELP_PARAS = [
     "走完一手后底部会写「电脑算到第 N 层」。",
     "【设置】难度、音效与音乐开关、音量滑块、对战总时间、单步限时、背景曲、悔棋限制、"
     "棋盘配色（原木 / 墨玉）都能调整并自动保存，墨玉下浮层也换成深色；"
+    "v2.18 起设置面板整体放大，标签、字号和按钮高度都提了一档，手指点着不费劲；"
     "电脑改在后台思考，算棋时窗口照常响应。主页背景想换成自己的画：把图片命名成 主页背景.jpg 放在程序目录即可。",
-    "【自己加曲子】设置面板里点「导入曲子」，挑一首 mp3 / ogg / wav，最多收 4 首，"
-    "导入后曲目行立刻多一个按钮（名字太长会自动截短，免得一格放不下）。"
-    "想删：先点中那首导入的曲子，再点「删曲」，4 秒内点第二次即删（内置古曲删不掉）。"
-    "也可以直接把文件丢进程序旁的 曲 目录，删掉即消失，不必改程序。"
-    "内置四首古曲（高山流水 / 平沙落雁 / 渔舟唱晚 / 广陵散）"
-    "在没有同名文件时用程序合成的旋律顶上。音效同理：音效 目录放 "
+    "【背景曲】内置五首合成古曲：高山流水 / 平沙落雁 / 渔舟唱晚 / 广陵散 / 梁祝，"
+    "设置面板点曲名即可切换，不用连电脑、不用拷文件。手机上导曲子、换开机图都太麻烦，"
+    "这两个入口从 v2.18 起取消了，直接把曲子带够。若程序目录（或 曲 目录）里有同名"
+    "mp3 / ogg / wav，会优先用文件、没有就用程序合成的旋律顶上。音效同理：音效 目录放 "
     "select.wav / 落子.wav / 吃子.wav / 将军.wav / 胜利.wav 即替换内置音效。",
-    "【换启动图】开机最早那一闪「楚汉象棋·一局定天下」是打进安装包的，装好后换不了；"
-    "但紧接着那段「中国象棋」四字印章入场动画可以自己换：把喜欢的图片命名成 启动图.png"
-    "（或 .jpg）放进程序目录，桌面也可在设置面板点「换启动图」直接挑一张，下次启动就铺在"
-    "印章底下；点「复原」或删掉该文件即回出厂图。不用重新打包，也不用改安装包。"
-    "手机上把图拷到 Android/data/org.songyq.xiangqi/files/ 这个目录即可，"
-    "和「导入曲子」是同一个地方，手机文件管理或数据线都能进去。",
+    "【开机画面】开机最早那一闪「楚汉象棋·一局定天下」是打进安装包的古典图，装好后换不了；"
+    "它后面不再有入场动画，直接就是主页，所以启动比以前快。手机上换图、换曲子都取消了，"
+    "不用再折腾文件目录。",
     "【退出】按 Esc、点底部「返回」或点窗口关闭键都不会直接退出：浮层先关，"
     "对局先回主页；回到主页再点右下角「退出」才真正结束程序（手机上是回手机桌面）。",
     "【升级安装】手机换新版安装包时，系统若提示「签名不一致 / 无法覆盖安装」，"
@@ -6483,26 +6552,16 @@ def help_paras():
             p = ("【退出】点底部「返回主菜单」回主页，浮层点右上角 × 关闭；"
                  "手机的返回键也一样：先关浮层、再回主页。"
                  "回到主页后点右下角「退出」即回手机桌面（不用再靠上滑手势）。")
-        elif p.startswith("【自己加曲子】"):
-            p = ("【自己加曲子】手机没有系统文件对话框，所以「导入曲子」按钮会告诉你放在哪："
-                 "把 mp3 / ogg / wav 拷到 Android/data/org.songyq.xiangqi/files/曲 目录"
-                 "（没有就新建一个），回来设置面板就能看到新曲目，最多收 4 首，"
-                 "名字太长会截短显示。想删掉导入的曲子：在设置里点中它，再点「删曲」，"
-                 "4 秒内点第二次即删（内置古曲删不掉）。拷法：数据线连电脑选「文件传输」，"
-                 "或用手机文件管理进那个目录。内置四首古曲（高山流水 / 平沙落雁 / "
-                 "渔舟唱晚 / 广陵散）在没有同名文件时用程序合成的旋律顶上。"
-                 "音效同理：同目录建 音效 文件夹，放 select.wav / 落子.wav / "
-                 "吃子.wav / 将军.wav / 胜利.wav 即替换内置音效。")
+        elif p.startswith("【背景曲】"):
+            p = ("【背景曲】内置五首合成古曲：高山流水 / 平沙落雁 / 渔舟唱晚 / 广陵散 / 梁祝，"
+                 "设置面板点曲名就换，不用连电脑、不用拷文件。手机上导曲子、换开机图都太麻烦，"
+                 "这两个入口 v2.18 起取消了，直接把曲子带够。")
         elif p.startswith("【导入】"):
             p = p.replace("或点「选文件」挑 棋谱 目录里的 .txt；", "")
-        elif p.startswith("【换启动图】"):
-            p = ("【换启动图】开机最早那一闪「楚汉象棋·一局定天下」是打进安装包的，装好后换不了；"
-                 "但紧接着那段「中国象棋」四字印章入场动画可以自己换：手机没有文件对话框，"
-                 "设置面板点「换启动图」会告诉你放哪——把喜欢的图片命名成 启动图.png（或 .jpg）"
-                 "拷到 Android/data/org.songyq.xiangqi/files/ 目录（和导入曲子同一个地方，"
-                 "手机文件管理或数据线选「文件传输」都能进去），重启就生效；"
-                 "点「复原」即删掉它、回出厂古典图。不用重新打包、不用重装，自己就能换。"
-                 "（部分机型也能直接放手机「下载」目录，程序会顺手找一下）")
+        elif p.startswith("【开机画面】"):
+            p = ("【开机画面】开机最早那一闪「楚汉象棋·一局定天下」是打进安装包的古典图，装好后换不了；"
+                 "它后面不再有入场动画，直接就是主页，启动比以前快。手机上换图、换曲子都取消了，"
+                 "不用再折腾文件目录。")
         # 手机版把「电脑」都改口成「手机」：同一个手机里没有电脑这回事，
         # 只有「数据线连电脑」那句说的是真的电脑，先护住再换。
         p = p.replace("数据线连电脑", "\x00PC\x00")
@@ -6813,7 +6872,7 @@ class BootSplash:
             pygame.time.wait(12)
 
 
-# ---------------------------- v2.17 启动入场 ----------------------------
+# --------- 自定义启动图（v2.18 起手机端取消动画，这组函数不再由 UI 调用） ---------
 def _event_types(*names):
     """按名字取事件常量， pygame 2.5.2（安卓）与 2.6.1（桌面）都兼容。"""
     out = []
@@ -7208,7 +7267,7 @@ def main():
     try:
         if pygame.mixer.get_init() is None:
             pygame.mixer.init(SAMPLE_RATE, -16, 2, 512)
-        # v2.17：安卓不在启动路上合成波形，交给入场动画每帧建一段；
+        # v2.18：启动路上一律不合成波形。安卓靠 ensure_sound() 第一次要响才建；
         # 桌面窗口一闪就开，这里一次性建好，音量设置才能立刻作用上去。
         if not IS_ANDROID:
             sounds = build_sounds()
@@ -7403,7 +7462,7 @@ def main():
         "import_buf": "",
         "import_focus": False,
         "import_msg": "",
-        "settings_msg": "",        # 设置面板底部的一行回执（导入曲子 / 换曲目）
+        "settings_msg": "",        # 设置面板底部的一行回执
         # ---- v1.1 新增 ----
         "sound_vol": max(0.0, min(1.0, float(settings0.get("sound_vol", DEFAULT_SOUND_VOL)))),
         "music_vol": max(0.0, min(1.0, float(settings0.get("music_vol", DEFAULT_MUSIC_VOL)))),
@@ -7442,10 +7501,10 @@ def main():
     # v2.4：暂存半局功能已撤掉，旧设置里攒下的条目不再读入（见 persist_settings 里清键）
 
     def apply_volumes():
-        """把音量设置作用到音效对象上（音乐音量在 bgm_tick 里用）"""
-        if not sounds:
-            return
+        """把音量设置记下来并作用到已生成的音效上（音乐音量在 bgm_tick 里用）。
+        v2.18：启动时 sounds 可能是空的，音量照样要存给后来按需生成的音效。"""
         vol = max(0.0, min(1.0, S["sound_vol"]))
+        _SOUND_VOL["v"] = vol
         for name in SOUND_NAMES:
             snd = sounds.get(name)
             if snd is not None:
@@ -7466,8 +7525,8 @@ def main():
     apply_volumes()
 
     def beep(name):
-        """受音效开关控制的声音播放"""
-        if S["sound_on"] and sounds:
+        """受音效开关控制的声音播放（v2.18：音效按需生成，sounds 可为空）"""
+        if S["sound_on"]:
             play(sounds, name)
 
     def persist_settings():
@@ -7848,8 +7907,9 @@ def main():
 
     def bgm_tick():
         """背景古曲循环播放：每帧调度下一音符，曲目切换时自动重头循环。
-        曲 目录里有同名音频（wav / ogg / mp3）时，直接用文件循环，不再合成。"""
-        if not S["bgm_on"] or not sounds:
+        曲 目录里有同名音频（wav / ogg / mp3）时，直接用文件循环，不再合成。
+        v2.18：不再依赖 sounds 字典是否为空（音效已改成按需生成）。"""
+        if not S["bgm_on"]:
             return
         ch = pygame.mixer.Channel(BGM_CHANNEL)
         now = time.perf_counter()
@@ -8140,67 +8200,9 @@ def main():
                         if not S["bgm_on"]:
                             S["settings_msg"] = "已换曲目，但背景音乐还关着（上面点「开」）。"
                         beep("select")
-                    elif cat == "music_import":
-                        if IS_ANDROID:
-                            # 安卓没有 tkinter 文件对话框：告诉用户把文件放哪儿，
-                            # 拷进去后曲目会自动出现在上面那一行
-                            d = music_write_dir() or "曲"
-                            S["settings_msg"] = (
-                                "拷到 Android/data/org.songyq.xiangqi/files/曲 即可（最多 %d 首）"
-                                % MUSIC_MAX_FILES)
-                            beep("illegal")
-                        else:
-                            ok, msg = import_music_file(pick_music_file())
-                            S["settings_msg"] = msg
-                            beep("select" if ok else "illegal")
-                    elif cat == "boot_img":
-                        # v2.17：手机上没文件对话框，告诉他把图拷到哪；桌面直接选图。
-                        # 换完不必重装，下次冷启动入场动画底下就铺这张图。
-                        if IS_ANDROID:
-                            d = extern_files_dir() or "Android/data/org.songyq.xiangqi/files"
-                            cur = find_boot_img(refresh=True)
-                            S["settings_msg"] = (
-                                "图命名 启动图.png 放 %s，重启生效。%s"
-                                % (d, "现在已在用自己的图，点「复原」可回出厂图。"
-                                   if cur else "当前是出厂古典图。"))
-                            beep("illegal")
-                        else:
-                            ok, msg = import_boot_img(pick_boot_img())
-                            S["settings_msg"] = msg
-                            beep("select" if ok else "illegal")
-                    elif cat == "boot_img_reset":
-                        ok, msg = remove_boot_img()
-                        S["settings_msg"] = msg
-                        beep("select" if ok else "illegal")
-                    elif cat == "music_delete":
-                        # 删曲只删「当前选中」那一首，而且只删曲 目录里的文件；
-                        # 内置古曲删不掉（程序合成的，删了没得听）。点两次才真删。
-                        name = S.get("bgm") or ""
-                        if not has_music_file(name):
-                            S["settings_msg"] = (
-                                "「%s」是内置古曲，删不了；先在上面选中一首导入的曲子再点「删曲」。"
-                                % (name or "当前曲目"))
-                            beep("illegal")
-                        else:
-                            now = time.perf_counter()
-                            if now - float(S.get("music_del_pending") or 0) <= 4.0:
-                                S["music_del_pending"] = 0.0
-                                ok, msg = delete_music_file(name)
-                                S["settings_msg"] = msg
-                                if ok:
-                                    names = bgm_names()
-                                    if S["bgm"] not in names and names:
-                                        stop_bgm()
-                                        S["bgm"] = names[0]
-                                    persist_settings()
-                                    beep("select")
-                                else:
-                                    beep("illegal")
-                            else:
-                                S["music_del_pending"] = now
-                                S["settings_msg"] = (
-                                    "4 秒内再点一次「删曲」才真删「%s」。" % name)
-                                beep("select")
+                    # v2.18：主人反馈手机上换曲子 / 换图太麻烦，这两个入口已取消。
+                    # 设置面板不再产生 music_import / music_delete / boot_img /
+                    # boot_img_reset 这几类按钮；内置古曲直接给足 5 首（含《梁祝》）。
                     return
             return
         if ov == "instructions":
@@ -8680,29 +8682,30 @@ def main():
     if boot:
         boot.finish()          # （v2.11 起 boot 恒为 None，保留此分支给旧调用兜底）
 
-    # ---------------- v2.17 启动入场 + 输入门禁 ----------------
-    # 旧版是「固定 0.9 秒只拦 MOUSE*」。安卓 SDL 一次触摸会同时报 FINGER* 和
-    # MOUSE*，漏掉的 FINGERDOWN 就是连敲最后一下跑进菜单的原因；固定时长也挡不住
-    # 「按住不放」「按下被吞、抬手落在窗口外」这类跨界配对。
-    # 现在改成两段：SDL 闪屏（古典图）→ 四字印章入场动画 → 主页；动画里把字体、
-    # 主页背景、印章字形、七段音效波形分摊到每帧做（残局库仍旧后台读），
-    # 等待看得见也不卡主线程，且动画时长固定，不会被后台任务越拖越长。
-    # 动画结束再按「还有没有手指没抬 / 最后一次输入后静默多久」决定放不放行。
-    input_gate = {"down": 0, "last": 0.0}
+    # ---------------- v2.18 启动：无过场 + 短门禁 ----------------
+    # v2.17 靠「四字印章入场动画」把字体 / 背景 / 音效波形分摊到每帧做，
+    # 但主人实测手机上那段动画被 SDL 闪屏盖住根本看不见，纯白等 0.95~1.5 秒。
+    # v2.18 直接砍掉：闪屏古典图之后立刻画主页，启动路上不再做任何过场。
+    # 只保留一段短门禁挡「启动时连敲」：安卓一次触摸会同时报 FINGER* 和
+    # MOUSE*，旧版只拦 MOUSE* 才漏了最后一下；现在统一收全部输入类型，
+    # 前 0.65 秒硬吞，之后按「还有没有手指没抬 / 最后输入后静默多久」放行，
+    # 总上限 1.8 秒，退出 / 返回键始终不拦。
+    input_gate = {"down": 0, "last": time.perf_counter()}
     gate_deadline = 0.0
+    hard_gate_until = 0.0
     start_library_load()
     if IS_ANDROID:
         try:
-            play_intro(screen, present, sounds, input_gate,
-                       min_seconds=0.95, max_seconds=1.5)
-        except Exception:
-            # 入场动画只是过场，任何字体 / 素材意外都不该挡住进主页
+            pygame.event.clear()      # 闪屏期间攒下的连敲先清掉
+        except pygame.error:
             pass
+        _t0 = time.perf_counter()
+        hard_gate_until = _t0 + 0.65
+        gate_deadline = _t0 + 1.8
         try:
-            apply_volumes()    # 音效是在动画里逐帧建的，这里补一次音量
+            apply_volumes()           # 只写音量表，音效等第一次真响才生成
         except Exception:
             pass
-        gate_deadline = time.perf_counter() + 2.2
     else:
         try:
             pygame.event.clear()
@@ -8780,16 +8783,18 @@ def main():
         # ---- 事件 ----
         # ---- 事件（窗口缩放时把鼠标坐标换算回逻辑画布坐标） ----
         events = pygame.event.get()
-        # ---- v2.17 启动输入门禁 ----
+        # ---- v2.18 启动输入门禁 ----
         # 安卓一次触摸会同时产生 FINGER* 与 MOUSE*，旧版只拦 MOUSE* 才漏了最后一下。
-        # 这里把「按下 / 抬起 / 移动 / 按键 / 滚轮 / 手势」全算进来：只要还有未配对
-        # 的按下、或最后一次输入后没静默够 0.55 秒、或残局库还在后台读，玩家输入
-        # 一律吞掉；退出键、QUIT、窗口事件始终放行，门禁最多 2.2 秒，不会把人锁死。
+        # 这里把「按下 / 抬起 / 移动 / 按键 / 滚轮 / 手势」全算进来：前 0.65 秒硬吞，
+        # 之后只要还有未配对的按下、或最后一次输入后没静默够 0.55 秒、或残局库
+        # 还在后台读，玩家输入一律吞掉；退出键、QUIT、窗口事件始终放行，
+        # 门禁最多 1.8 秒，不会把人锁死。
         if IS_ANDROID:
             _now = time.perf_counter()
             _back = getattr(pygame, "K_AC_BACK", -999)
             _gating = (_now < gate_deadline and
-                       (input_gate["down"] > 0
+                       (_now < hard_gate_until
+                        or input_gate["down"] > 0
                         or _now - input_gate["last"] < 0.55
                         or library_loading()))
             if _gating:
