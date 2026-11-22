@@ -22,9 +22,9 @@ jobs:
       - name: 核对仓库里的程序版本
         run: |
           set -e
-          V=$(grep -m1 '^VERSION = ' xiangqi.py | sed -E 's/.*"(.*)".*/\1/')
-          S=$(grep -m1 '^version = ' buildozer.spec | sed -E 's/.*= *//')
-          N=$(grep -m1 '^android.numeric_version' buildozer.spec | sed -E 's/.*= *//')
+          V=$(grep -m1 '^VERSION = ' xiangqi.py | sed -E 's/.*"(.*)".*/\1/' | tr -d '\r')
+          S=$(grep -m1 '^version = ' buildozer.spec | sed -E 's/.*= *//' | tr -d '\r')
+          N=$(grep -m1 '^android.numeric_version' buildozer.spec | sed -E 's/.*= *//' | tr -d '\r')
           echo "xiangqi.py 里的 VERSION = ${V:-未找到}"
           echo "buildozer.spec 的 version = ${S:-未找到} / numeric = ${N:-未找到}"
           {
