@@ -561,7 +561,7 @@ def load_font(size):
 
 
 # ---------------------------- 版本 / 创作者 / 设置项 ----------------------------
-VERSION = "2.20"
+VERSION = "2.21"
 APP_NAME = "中国象棋-智算单机版"
 CREATOR = "songyq"     # 主页右下角标注；
 TIME_OPTIONS = [5, 10, 20, 30, 60]    # 对战时间（分钟）
@@ -2160,20 +2160,25 @@ def boot_mark(name):
 def boot_flush():
     """把启动耗时写到用户能直接看到的「内部存储/中国象棋/启动耗时.txt」。
     v2.20：原来写 Android/data/.../files/ 那个目录 Android 11+ 对文件管理器隐藏，
-    主人根本找不到。现在优先写公共目录 中国象棋/，并顺带在旧位置各留一份兜底。"""
+    主人根本找不到。现在优先写公共目录 中国象棋/，并顺带在旧位置各留一份兜底。
+    v2.21：修正 %7.0f 的参数顺序（原来把曲名当毫秒、毫秒当文字，一启动就
+    TypeError 退出）；同时整段包 try，日志写失败绝不连累游戏。"""
     if not IS_ANDROID:
         return
-    lines = ["# 每次启动覆盖写；+xxx ms 是距程序开始的毫秒数\n"]
-    lines += ["+%7.0f ms  %s\n" % (name, ms) for name, ms in _BOOT_MARKS]
-    # 优先公共目录（主人能用文件管理器 / 数据线直接看到）
-    for d in (public_storage_dir(), extern_files_dir()):
-        if not d:
-            continue
-        try:
-            with open(os.path.join(d, "启动耗时.txt"), "w", encoding="utf-8") as fp:
-                fp.writelines(lines)
-        except OSError:
-            continue
+    try:
+        lines = ["# 每次启动覆盖写；+xxx ms 是距程序开始的毫秒数\n"]
+        lines += ["+%7.0f ms  %s\n" % (ms, name) for name, ms in _BOOT_MARKS]
+        # 优先公共目录（主人能用文件管理器 / 数据线直接看到）
+        for d in (public_storage_dir(), extern_files_dir()):
+            if not d:
+                continue
+            try:
+                with open(os.path.join(d, "启动耗时.txt"), "w", encoding="utf-8") as fp:
+                    fp.writelines(lines)
+            except OSError:
+                continue
+    except Exception:
+        return
 
 
 def request_storage_permissions():
@@ -9041,7 +9046,7 @@ def main():
         frame_no += 1
         if frame_no == 2:
             boot_mark("主循环第 2 帧")
-            boot_flush()          # 写到 Android/data/.../files/启动耗时.txt
+            boot_flush()          # 写到 内部存储/中国象棋/启动耗时.txt
         elif frame_no == 90 and IS_ANDROID:
             # 主菜单稳下来之后（约 1.5 秒）再申请存储权限，不跟启动抢时间。
             # 拿到权限后才能读「内部存储/中国象棋/曲」；拿不到就只用内置曲。
