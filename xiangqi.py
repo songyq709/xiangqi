@@ -2,6 +2,18 @@
 # pyright: reportMissingImports=false
 """中国象棋 · 智算单机版（Pygame 版）
 
+v2.20 改动（主人实测反馈）：
+  1) 看说明页时合成古曲卡顿、但真曲子不卡：根因是合成曲原来每帧只发一个音符，
+     重渲染界面一掉帧音符就接不上。现在后台线程把整首合成一次，
+     用 mixer.Sound.play(loops=-1) 交给音频线程连续循环，跟帧率彻底解耦。
+  2) 两首随包曲子装机后没出现：中文名放在 曲/ 子目录，打包 / 上传时容易丢。
+     改成打在资源根目录的 ASCII 文件（bgm_liangzhu.ogg / bgm_lairifangchang.ogg），
+     代码里做中文曲名映射并从根目录兜底查找，装机即可见、可播。
+  3) 启动图还没关、手指就能点动：门禁改由「主页首帧真正上屏」驱动，
+     页面没就绪前一律吞掉触摸；残局库后台读不再拦屏幕。
+  4) 启动耗时.txt 找不到：改写到「内部存储/中国象棋/」这个看得见的目录。
+  5) 帮助 / 说明页文案同步。
+
 v2.19 改动（主人实测反馈）：
   1) 《梁祝》《来日方长》两首直接打进安装包（曲/ 目录随 APK 一起装，已转成 ogg，
      合共 4.4MB），装上就能选，不用连电脑、不用找 Android/data。
@@ -549,7 +561,7 @@ def load_font(size):
 
 
 # ---------------------------- 版本 / 创作者 / 设置项 ----------------------------
-VERSION = "2.19"
+VERSION = "2.20"
 APP_NAME = "中国象棋-智算单机版"
 CREATOR = "songyq"     # 主页右下角标注；
 TIME_OPTIONS = [5, 10, 20, 30, 60]    # 对战时间（分钟）
@@ -676,6 +688,58 @@ def play_note(freq, dur, vol=0.16, channel=None):
             pygame.mixer.Channel(channel).play(snd)
         except (AttributeError, pygame.error):
             snd.play()
+
+
+# ---- v2.20：合成古曲整段预合成，交给 SDL 音频线程循环播放，不再逐音符调度 ----
+# 卡顿根因：bgm_tick 每帧只发一个音符、还查 ch.get_busy()，看说明 / 残局列表这类
+# 重渲染界面把帧率拖到二三十帧时，音符之间出现空档，听着就是一顿一顿。
+# 文件曲不卡是因为它走 mixer.music，由独立音频线程边读边解码，跟帧率无关。
+# 这里把合成曲也做成一整段 PCM，一次交给 mixer.Sound.play(loops=-1)，同样脱离帧率。
+# 合成放在后台线程做（纯数值计算、不碰 pygame），就绪后主线程再包成 Sound，避免卡 UI。
+_FULL_TRACK_PCM = {}       # name -> 合成好的整段 PCM bytes（待主线程包装）
+_FULL_TRACK_SND = {}       # name -> pygame.mixer.Sound（缓存，最多 3 首）
+_FULL_TRACK_PENDING = set()  # 正在后台合成中的曲名
+
+
+def _synth_full_track(name):
+    """后台线程：把整首合成古曲拼成一段 PCM（不碰 pygame，纯计算）。"""
+    track = BGM_TRACKS.get(name)
+    if not track:
+        return
+    try:
+        # 每个音符 (freq, dur, decay)，decay 与 play_note 的 4.5 保持一致
+        segs = [(freq, dur, 4.5) for freq, dur in track]
+        _FULL_TRACK_PCM[name] = _build_wave(segs, volume=0.14, noise=0.0)
+    except Exception:
+        pass
+    finally:
+        _FULL_TRACK_PENDING.discard(name)
+
+
+def _get_full_sound(name):
+    """取某合成曲的整段 Sound。返回 (snd, ready)：
+    snd 为 None / ready False 表示后台还在合成，调用方先用逐音符顶着。"""
+    snd = _FULL_TRACK_SND.get(name)
+    if snd is not None:
+        return snd, True
+    pcm = _FULL_TRACK_PCM.get(name)
+    if pcm is None:
+        if name not in _FULL_TRACK_PENDING:
+            _FULL_TRACK_PENDING.add(name)
+            t = threading.Thread(target=_synth_full_track, args=(name,), daemon=True)
+            t.start()
+        return None, False
+    try:
+        snd = pygame.mixer.Sound(buffer=pcm)
+    except Exception:
+        return None, False
+    _FULL_TRACK_SND[name] = snd
+    _FULL_TRACK_PCM.pop(name, None)
+    if len(_FULL_TRACK_SND) > 3:
+        old = next(iter(_FULL_TRACK_SND))
+        if old != name:
+            _FULL_TRACK_SND.pop(old, None)
+    return snd, True
 
 
 # ---------------------------- 宋体（古典标题 / 落款） ----------------------------
@@ -2008,6 +2072,13 @@ SFX_ALIASES = {
     "check": ("将军",), "win": ("胜利",), "lose": ("失败",),
     "illegal": ("误操作",),
 }
+# v2.20：随 APK 一起打进安装包的两首真曲子。
+# 中文曲名 -> 根目录 ASCII 文件名（子目录 + 中文名在 p4a 打包时容易丢，放根目录最稳）。
+# 值也可以是一个元组，列出所有候选名（内置优先、兼容旧的中文名文件）。
+_BUNDLED_AUDIO = {
+    "梁祝":     ("bgm_liangzhu", "梁祝"),
+    "来日方长": ("bgm_lairifangchang", "来日方长"),
+}
 _MUSIC_CACHE = {}
 _MUSIC_STATE = {"path": None}     # 当前 mixer.music 里装的是哪个文件（流式播放用）
 
@@ -2087,19 +2158,22 @@ def boot_mark(name):
 
 
 def boot_flush():
-    """把启动耗时写到 Android/data/.../files/启动耗时.txt，装完发现还慢就直接看这个文件"""
+    """把启动耗时写到用户能直接看到的「内部存储/中国象棋/启动耗时.txt」。
+    v2.20：原来写 Android/data/.../files/ 那个目录 Android 11+ 对文件管理器隐藏，
+    主人根本找不到。现在优先写公共目录 中国象棋/，并顺带在旧位置各留一份兜底。"""
     if not IS_ANDROID:
         return
-    d = extern_files_dir()
-    if not d:
-        return
-    try:
-        with open(os.path.join(d, "启动耗时.txt"), "w", encoding="utf-8") as fp:
-            fp.write("# 每次启动覆盖写；+xxx ms 是距程序开始的毫秒数\n")
-            for name, ms in _BOOT_MARKS:
-                fp.write("+%7.0f ms  %s\n" % (ms, name))
-    except OSError:
-        pass
+    lines = ["# 每次启动覆盖写；+xxx ms 是距程序开始的毫秒数\n"]
+    lines += ["+%7.0f ms  %s\n" % (name, ms) for name, ms in _BOOT_MARKS]
+    # 优先公共目录（主人能用文件管理器 / 数据线直接看到）
+    for d in (public_storage_dir(), extern_files_dir()):
+        if not d:
+            continue
+        try:
+            with open(os.path.join(d, "启动耗时.txt"), "w", encoding="utf-8") as fp:
+                fp.writelines(lines)
+        except OSError:
+            continue
 
 
 def request_storage_permissions():
@@ -2160,23 +2234,48 @@ def _audio_bases():
     return bases
 
 
+def _name_candidates(nm):
+    """把曲名展开成所有可能的文件名：自身 + 内置 ASCII 别名。
+    例如「梁祝」-> ("梁祝", "bgm_liangzhu")，哪个文件在就用哪个。"""
+    out = [nm]
+    for canonical, aliases in _BUNDLED_AUDIO.items():
+        if nm == canonical or nm in aliases:
+            for a in aliases:
+                if a not in out:
+                    out.append(a)
+    return out
+
+
 def find_audio(folder, names):
-    """在 音效 / 曲 目录里按名找音频文件（wav / ogg / mp3），找不到返回 None"""
-    for base in _audio_bases():
-        d = os.path.join(base, folder)
-        if not os.path.isdir(d):
-            continue
-        for nm in names:
-            for ext in AUDIO_EXTS:
-                path = os.path.join(d, nm + ext)
-                if os.path.exists(path):
-                    return path
+    """按名找音频文件（wav / ogg / mp3），找不到返回 None。
+
+    v2.20：两处兜底，专治「随包曲子装机后找不到」——
+      1) 除了 <base>/曲/ 子目录，也直接看 <base>/ 根目录（内置曲就是放这里）；
+      2) 中文曲名会自动尝试 ASCII 别名（梁祝 <-> bgm_liangzhu）。"""
+    bases = _audio_bases()
+    for nm in names:
+        for cand in _name_candidates(nm):
+            for base in bases:
+                # 子目录里找（用户自己拷的、以及旧版随包的中文名文件）
+                d = os.path.join(base, folder)
+                for ext in AUDIO_EXTS:
+                    path = os.path.join(d, cand + ext)
+                    if os.path.exists(path):
+                        return path
+                # v2.20：根目录也找（内置 bgm_*.ogg 打在资源根目录）
+                for ext in AUDIO_EXTS:
+                    path = os.path.join(base, cand + ext)
+                    if os.path.exists(path):
+                        return path
     return None
 
 
 def music_library():
     """扫 曲 目录：返回音频名（去扩展名、去重、按名字排序）。
-    放进去就出现、删掉就消失，不用改代码。"""
+    放进去就出现、删掉就消失，不用改代码。
+
+    v2.20：随包内置曲（梁祝 / 来日方长）也登记进来——它们打在资源根目录，
+    中文名子目录扫不到，这里显式把识别到的内置曲补进曲目表。"""
     names = []
     for base in _audio_bases():
         d = os.path.join(base, MUSIC_DIR)
@@ -2191,6 +2290,10 @@ def music_library():
             stem = stem.strip()
             if ext.lower() in AUDIO_EXTS and stem and stem not in names:
                 names.append(stem)
+    # 内置随包曲：查得到文件就把规范中文曲名加进去（去重）
+    for canonical in _BUNDLED_AUDIO:
+        if canonical not in names and find_audio(MUSIC_DIR, (canonical,)):
+            names.append(canonical)
     return names
 
 
@@ -8082,10 +8185,12 @@ def main():
         _stop_bgm_playback()
 
     def bgm_tick():
-        """背景古曲循环播放：每帧调度下一音符，曲目切换时自动重头循环。
-        曲 目录里有同名音频（wav / ogg / mp3）时，用文件流式循环，不再合成。
-        v2.19：文件曲改走 mixer.music（边读边解码），
-        不再把整首解成 PCM 塞进内存，说明页滚动时不再一顿一顿。"""
+        """背景古曲循环播放（v2.20 根治说明页卡顿）。
+
+        两条路都脱离主循环帧率，看说明 / 列表再重也不顿：
+          - 文件曲（梁祝 / 来日方长 ogg）：mixer.music 边读边解码；
+          - 合成古曲：后台线程整段合成一次，mixer.Sound.play(loops=-1) 连续循环。
+        合成尚未就绪的零点几秒里，先用逐音符方式顶着，不至于静音。"""
         if not S["bgm_on"]:
             return
         ch = pygame.mixer.Channel(BGM_CHANNEL)
@@ -8097,6 +8202,7 @@ def main():
             st["idx"] = 0
             st["next_time"] = now + 0.05
             st["user"] = load_user_music(S["bgm"])
+            st["full_ready"] = False
             _stop_bgm_playback()          # 换曲先停掉上一首（两条路都停）
         path = st.get("user")
         if path:
@@ -8116,6 +8222,16 @@ def main():
         track = BGM_TRACKS.get(S["bgm"])
         if not track:
             return
+        # ---- 合成古曲：整段循环播放（就绪后完全交给音频线程，与帧率无关） ----
+        snd, ready = _get_full_sound(S["bgm"])
+        if ready and snd is not None:
+            if not st.get("full_ready") or not ch.get_busy():
+                ch.play(snd, loops=-1)
+            st["full_ready"] = True
+            ch.set_volume(vol)
+            return
+        st["full_ready"] = False
+        # ---- 兜底：整段还在后台合成，用逐音符顶住这一小段 ----
         if ch.get_busy():
             return
         if now < st["next_time"]:
@@ -8123,7 +8239,7 @@ def main():
         if st["idx"] >= len(track):
             st["idx"] = 0
         freq, dur = track[st["idx"]]
-        play_note(freq, dur, 0.14 * max(0.0, min(1.0, S["music_vol"])), BGM_CHANNEL)
+        play_note(freq, dur, 0.14 * vol, BGM_CHANNEL)
         st["idx"] += 1
         st["next_time"] = now + dur
 
@@ -8877,15 +8993,13 @@ def main():
     input_gate = {"down": 0, "last": time.perf_counter()}
     gate_deadline = 0.0
     hard_gate_until = 0.0
+    home_shown_at = None        # v2.20：主页首帧真正上屏的时刻，门禁从这一刻算起
     start_library_load()
     if IS_ANDROID:
         try:
             pygame.event.clear()      # 闪屏期间攒下的连敲先清掉
         except pygame.error:
             pass
-        _t0 = time.perf_counter()
-        hard_gate_until = _t0 + 0.65
-        gate_deadline = _t0 + 1.8
         try:
             apply_volumes()           # 只写音量表，音效等第一次真响才生成
         except Exception:
@@ -8900,6 +9014,17 @@ def main():
         draw_home(screen, S["bgm"])
         present()
         boot_mark("主页首帧已上屏")
+        if IS_ANDROID:
+            # v2.20 根治「启动图还没关就能点动」：门禁不按启动时猜的固定秒数，
+            # 而是等主页这一帧真的翻上屏幕才开始计时。闪屏盖着 / 主页没画出来时，
+            # home_shown_at 仍是 None，所有触摸一律吞掉，页面就绪后才逐步放行。
+            home_shown_at = time.perf_counter()
+            hard_gate_until = home_shown_at + 0.45
+            gate_deadline = home_shown_at + 1.2
+            try:
+                pygame.event.clear()   # 主页翻上来这一刻把闪屏期攒的输入再清一次
+            except pygame.error:
+                pass
     except (pygame.error, AttributeError):
         pass
 
@@ -8975,20 +9100,21 @@ def main():
         # ---- 事件 ----
         # ---- 事件（窗口缩放时把鼠标坐标换算回逻辑画布坐标） ----
         events = pygame.event.get()
-        # ---- v2.18 启动输入门禁 ----
-        # 安卓一次触摸会同时产生 FINGER* 与 MOUSE*，旧版只拦 MOUSE* 才漏了最后一下。
-        # 这里把「按下 / 抬起 / 移动 / 按键 / 滚轮 / 手势」全算进来：前 0.65 秒硬吞，
-        # 之后只要还有未配对的按下、或最后一次输入后没静默够 0.55 秒、或残局库
-        # 还在后台读，玩家输入一律吞掉；退出键、QUIT、窗口事件始终放行，
-        # 门禁最多 1.8 秒，不会把人锁死。
+        # ---- v2.20 启动输入门禁：主页就绪才放行（根治「启动图没关就能点动」）----
+        # 安卓一次触摸会同时报 FINGER* 与 MOUSE*，全部纳入统计。放行的总开关是
+        # home_shown_at：主页首帧真正翻上屏幕之前它一直是 None，这段时间的触摸
+        # （闪屏还盖着、用户以为还没好就连敲）一律吞掉；主页上屏后再按
+        # 「硬吞 0.45 秒 + 没有按住 / 静默够 0.4 秒」逐步放行，最多 1.2 秒兜底。
+        # 残局库是后台线程慢慢读的，不再当作门禁条件——不该让人干等它而白锁屏幕。
+        # 退出键 / QUIT / 窗口事件 / 系统返回键始终放行。
         if IS_ANDROID:
             _now = time.perf_counter()
             _back = getattr(pygame, "K_AC_BACK", -999)
-            _gating = (_now < gate_deadline and
-                       (_now < hard_gate_until
-                        or input_gate["down"] > 0
-                        or _now - input_gate["last"] < 0.55
-                        or library_loading()))
+            _not_ready = home_shown_at is None
+            _gating = _not_ready or (_now < gate_deadline and
+                                     (_now < hard_gate_until
+                                      or input_gate["down"] > 0
+                                      or _now - input_gate["last"] < 0.4))
             if _gating:
                 for _ev in events:
                     if _ev.type in INPUT_DOWN_TYPES:
@@ -9003,17 +9129,6 @@ def main():
                         input_gate["last"] = _now
                 events = [ev for ev in events
                           if ev.type not in INPUT_ALL_TYPES
-                          or (ev.type == pygame.KEYDOWN
-                              and getattr(ev, "key", None) == _back)]
-            elif library_loading():
-                # 门禁到点但后台还没读完：仍只放行退出 / 窗口 / 返回键，
-                # 不让主线程 join 后台线程造成无响应。
-                _wev = getattr(pygame, "WINDOWEVENT", None)
-                _keep = {pygame.QUIT}
-                if _wev is not None:
-                    _keep.add(_wev)
-                events = [ev for ev in events
-                          if ev.type in _keep
                           or (ev.type == pygame.KEYDOWN
                               and getattr(ev, "key", None) == _back)]
         if events and not S.get("lib_ready"):
