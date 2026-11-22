@@ -85,6 +85,35 @@ jobs:
           python3 --version
           java -version 2>&1 | head -1
 
+      # v2.19：固定调试签名。
+      # 以前每次 run 都是全新 runner，p4a 会现生成一个 debug.keystore，
+      # 每版签名指纹都不一样，手机上只能卸载旧版才能装 —— 残局库和通关记录
+      # 跟着一起被清掉。现在仓库里带一份固定 keystore，这里转成 JKS 放进
+      # ~/.android/debug.keystore，p4a 发现它已存在就不再新生成，签名从此固定，
+      # 以后新版本可以直接覆盖安装。
+      - name: 固定签名（可覆盖安装）
+        run: |
+          mkdir -p ~/.android
+          if [ -f keystore/debug.keystore ]; then
+            rm -f ~/.android/debug.keystore
+            if keytool -importkeystore -noprompt \
+                 -srckeystore keystore/debug.keystore -srcstoretype PKCS12 -srcstorepass android \
+                 -destkeystore ~/.android/debug.keystore -deststoretype JKS \
+                 -deststorepass android -destkeypass android \
+               && keytool -list -keystore ~/.android/debug.keystore -storepass android \
+                  | grep -qi androiddebugkey; then
+              echo "已转出 JKS，别名 androiddebugkey 核对通过"
+            else
+              cp keystore/debug.keystore ~/.android/debug.keystore
+              echo "转换或别名核对未过，改为直接使用仓库里的 PKCS12 keystore"
+            fi
+            chmod 600 ~/.android/debug.keystore
+            echo "--- keystore 内容 ---"
+            keytool -list -keystore ~/.android/debug.keystore -storepass android | head -8
+          else
+            echo "::warning::仓库里没有 keystore/debug.keystore，本轮签名仍会随机生成"
+          fi
+
       - name: 装 buildozer
         run: |
           export PIP_RETRIES=5 PIP_DEFAULT_TIMEOUT=60

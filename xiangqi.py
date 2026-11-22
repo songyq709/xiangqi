@@ -2,6 +2,19 @@
 # pyright: reportMissingImports=false
 """中国象棋 · 智算单机版（Pygame 版）
 
+v2.19 改动（主人实测反馈）：
+  1) 《梁祝》《来日方长》两首直接打进安装包（曲/ 目录随 APK 一起装，已转成 ogg，
+     合共 4.4MB），装上就能选，不用连电脑、不用找 Android/data。
+     另开一条搜索路径「内部存储/中国象棋/曲」：手机文件管理器、数据线都能直接看到，
+     拖进去就行；首次启动会弹一次存储权限，不给也只影响这一项。
+  2) 文件曲改流式播放：以前把整首 mp3 解成 PCM 塞进内存（一首 20~40MB），
+     手机上翻说明页会一顿一顿；现在 mixer.music 边读边解码，常驻几 MB。
+  3) 残局库导出不再扔进看不见的私有目录，改到外部可见位置，
+     并在界面写出完整路径；卸载前的备份路径也写进说明页了。
+  4) 安装包改用固定签名（仓库内 keystore 参与 CI 签名），
+     以后新版本可以直接覆盖安装，不必卸载旧版，残局库与已通关记录不会再丢。
+  5) 说明页同步改写：取消「移到别的目录再装新版」这类走不通的说法。
+
 v2.18 改动（主人实测反馈）：
   1) 手机取消「中国象棋」四字印章入场动画：手机上被 SDL 闪屏盖住根本看不见，
      却白等 0.95~1.5 秒。现在闪屏古典图之后直接进主页，这段等待整个没有了。
@@ -536,7 +549,7 @@ def load_font(size):
 
 
 # ---------------------------- 版本 / 创作者 / 设置项 ----------------------------
-VERSION = "2.18"
+VERSION = "2.19"
 APP_NAME = "中国象棋-智算单机版"
 CREATOR = "songyq"     # 主页右下角标注；
 TIME_OPTIONS = [5, 10, 20, 30, 60]    # 对战时间（分钟）
@@ -1989,12 +2002,14 @@ def _build_wave(segments, volume=0.5, noise=0.0):
 AUDIO_EXTS = (".wav", ".ogg", ".mp3")
 SFX_DIR = "音效"           # 放 select.wav / 落子.wav 这类，同名即替换内置音效
 MUSIC_DIR = "曲"           # 放 高山流水.ogg 这类，同名即替换内置古曲
+PUBLIC_DIR = "中国象棋"    # 内部存储/中国象棋：v2.19 新增，数据线能直接看到的放曲目录
 SFX_ALIASES = {
     "select": ("选中",), "move": ("落子",), "capture": ("吃子",),
     "check": ("将军",), "win": ("胜利",), "lose": ("失败",),
     "illegal": ("误操作",),
 }
 _MUSIC_CACHE = {}
+_MUSIC_STATE = {"path": None}     # 当前 mixer.music 里装的是哪个文件（流式播放用）
 
 
 def extern_files_dir():
@@ -2012,12 +2027,132 @@ def extern_files_dir():
     return d if os.path.isdir(d) else None
 
 
+def save_to_downloads(filename, data):
+    """把一份字节写进系统的「下载」目录（MediaStore.Downloads），返回展示用路径。
+
+    为什么非要走 MediaStore：
+      - 应用私有目录 /data/data/... 卸载即清；
+      - Android/data/<包名> 卸载时也会被系统整个删掉，放那儿等于没备份；
+      - Android 10 起直接写 /sdcard/Download 会被分区存储挡掉（EACCES）。
+    MediaStore 插入自己的媒体文件不需要任何存储权限，也不会被卸载连带删掉，
+    文件管理器、数据线都能直接看到。失败返回空串，调用方自行兜底。"""
+    if not IS_ANDROID:
+        return ""
+    # v2.19：有存储权限时直接写「内部存储/中国象棋」，文件管理器一点就能找到，
+    # 比 MediaStore 的「下载」更好认；写不了再走 MediaStore。
+    pub = public_storage_dir()
+    if pub:
+        try:
+            with open(os.path.join(pub, filename), "wb") as fp:
+                fp.write(data)
+            return PUBLIC_DIR + "/" + filename
+        except OSError:
+            pass
+    try:
+        from jnius import autoclass
+        activity = autoclass("org.kivy.android.PythonActivity").mActivity
+        resolver = activity.getContentResolver()
+        ContentValues = autoclass("android.content.ContentValues")
+        MediaStore = autoclass("android.provider.MediaStore")
+        Downloads = autoclass("android.provider.MediaStore$Downloads")
+        values = ContentValues()
+        values.put("mime_type", "application/json")
+        values.put("_display_name", filename)
+        uri = resolver.insert(Downloads.EXTERNAL_CONTENT_URI, values)
+        if uri is None:
+            return ""
+        out = resolver.openOutputStream(uri)
+        if out is None:
+            return ""
+        try:
+            out.write(bytearray(data))
+            out.flush()
+        finally:
+            out.close()
+        return "下载/" + filename
+    except Exception:
+        return ""
+
+
+_BOOT_T0 = time.perf_counter()
+_BOOT_MARKS = []
+
+
+def boot_mark(name):
+    """记一个启动时间点（只在内存里攒着，不落盘，不拖慢启动）"""
+    try:
+        _BOOT_MARKS.append((name, (time.perf_counter() - _BOOT_T0) * 1000.0))
+    except Exception:
+        pass
+
+
+def boot_flush():
+    """把启动耗时写到 Android/data/.../files/启动耗时.txt，装完发现还慢就直接看这个文件"""
+    if not IS_ANDROID:
+        return
+    d = extern_files_dir()
+    if not d:
+        return
+    try:
+        with open(os.path.join(d, "启动耗时.txt"), "w", encoding="utf-8") as fp:
+            fp.write("# 每次启动覆盖写；+xxx ms 是距程序开始的毫秒数\n")
+            for name, ms in _BOOT_MARKS:
+                fp.write("+%7.0f ms  %s\n" % (ms, name))
+    except OSError:
+        pass
+
+
+def request_storage_permissions():
+    """请求读存储权限，只为让「内部存储/中国象棋/曲」能读到。
+
+    安卓 13+ 要 READ_MEDIA_AUDIO，12 及以下用 READ_EXTERNAL_STORAGE。
+    拿不到也不要紧：曲目退回内置的几首，其他功能一律照旧。"""
+    if not IS_ANDROID:
+        return
+    try:
+        from android.permissions import request_permissions, Permission
+    except Exception:
+        return
+    want = []
+    for nm in ("READ_MEDIA_AUDIO", "READ_EXTERNAL_STORAGE"):
+        p = getattr(Permission, nm, None)
+        if p is not None and p not in want:
+            want.append(p)
+    if not want:
+        return
+    try:
+        request_permissions(want)
+    except Exception:
+        pass
+
+
+def public_storage_dir():
+    """内部存储/中国象棋 —— 手机文件管理器、数据线都能直接看到的目录。
+
+    里面放 曲 / 音效 子目录即可，不用再进 Android/data。
+    安卓 11+ 的分区存储会拦住未授权的写入，所以这里可能返回 None；
+    读不到时上层静默跳过（音乐退回内置曲），不影响启动。
+    非安卓：桌面版本来就在程序目录旁，不需要这层。"""
+    if not IS_ANDROID:
+        return None
+    ext = os.environ.get("EXTERNAL_STORAGE") or "/storage/emulated/0"
+    d = os.path.join(ext, PUBLIC_DIR)
+    try:
+        if not os.path.isdir(d):
+            os.makedirs(d, exist_ok=True)
+        return d if os.path.isdir(d) else None
+    except OSError:
+        return None
+
+
 def _audio_bases():
     """找 音效 / 曲 目录的位置：手机外部可写目录排在前面（自己拷进去的最优先），
     然后是程序目录、解包目录，以及它们的上一级
     （exe 放在 dist 里时，把 曲 目录摆在 dist 上一层同样能被找到）"""
     bases = []
-    cands = [extern_files_dir(), _BASE_DIR, _res_dir(),
+    # v2.19：外部私有目录（Android/data）排最前，其次是「内部存储/中国象棋」——
+    # 后者是给用户自己放曲的：文件管理器与数据线都能看到，不用去爬 Android/data。
+    cands = [extern_files_dir(), public_storage_dir(), _BASE_DIR, _res_dir(),
              os.path.dirname(_BASE_DIR)]
     for base in cands:
         if base and base not in bases and os.path.isdir(base):
@@ -2074,18 +2209,16 @@ def bgm_names():
 
 
 def load_user_music(name):
-    """曲 目录里若有同名音频，就用它循环播放，否则用内置合成古曲"""
+    """曲 目录里若有同名音频，返回文件路径（交给 mixer.music 流式播放），否则 None。
+
+    v2.19：不再用 pygame.mixer.Sound(path) 把整首音乐解码进内存。
+    一首 3 分钟的 mp3 解成 PCM 约 20~40MB，手机上既吃内存又抢 CPU，
+    表现就是听着音乐翻说明页会一顿一顿。改成流式后常驻内存只有几 MB。"""
     if name in _MUSIC_CACHE:
         return _MUSIC_CACHE[name]
-    snd = None
     path = find_audio(MUSIC_DIR, (name,))
-    if path:
-        try:
-            snd = pygame.mixer.Sound(path)
-        except (pygame.error, OSError):
-            snd = None
-    _MUSIC_CACHE[name] = snd
-    return snd
+    _MUSIC_CACHE[name] = path
+    return path
 
 
 # v2.17：波形合成表。v2.18 起启动路上一律不合成 —— 手机入场动画取消后，
@@ -6329,12 +6462,10 @@ def draw_settings_overlay(screen, state):
         col = C((96, 82, 66)) if small else C((78, 64, 50))
         screen.blit(font.render(text, True, col), (x, y))
 
-    # 曲目小提示：内置几首、曲目录里另有几首（不再提供导入 / 删曲入口）
-    n_music = len(music_library())
-    tip = "内置 %d 首古曲（含《梁祝》）" % len(BGM_CORE)
-    if n_music:
-        tip += "，曲目录另有 %d 首" % n_music
-    if len(bgm_names()) > BGM_MAX:
+    # 曲目小提示：一共几首可选（v2.19 起《梁祝》《来日方长》随包内置）
+    names_all = bgm_names()
+    tip = "可选 %d 首（梁祝 / 来日方长已内置）" % len(names_all)
+    if len(names_all) > BGM_MAX:
         tip += "　只看前 %d 首" % BGM_MAX
 
     items = lay["items"]
@@ -6436,7 +6567,7 @@ HELP_PARAS = [
     "安卓版：竖屏全屏、手指点选；底栏排成两排——上排 悔棋/提示/复盘/存局/返回主菜单，"
     "下排 认输/提和/棋谱/重开，格子比桌面版大一号，拇指够得着；开机闪一张古典图就直接进主页，"
     "不再放看不见的过场动画；设置、残局库都存在应用私有目录，不占相册、不用存储权限；"
-    "内置 5 首古曲（含《梁祝》），设置里点一下就能换，不用连电脑。"
+    "内置 6 首可选：《梁祝》《来日方长》是真曲子随包装好，另有四首合成古曲；"
     "桌面版：窗口可缩放，鼠标右键摆棋删子；键盘 Esc 关浮层、回车确认；"
     "存档、棋谱都在 exe 旁边，拷走就能搬去另一台机器。"
     "一句话：手机上胜在随手就能下，桌面上胜在摆棋、整理谱子方便。",
@@ -6505,21 +6636,22 @@ HELP_PARAS = [
     "棋盘配色（原木 / 墨玉）都能调整并自动保存，墨玉下浮层也换成深色；"
     "v2.18 起设置面板整体放大，标签、字号和按钮高度都提了一档，手指点着不费劲；"
     "电脑改在后台思考，算棋时窗口照常响应。主页背景想换成自己的画：把图片命名成 主页背景.jpg 放在程序目录即可。",
-    "【背景曲】内置五首合成古曲：高山流水 / 平沙落雁 / 渔舟唱晚 / 广陵散 / 梁祝，"
-    "设置面板点曲名即可切换，不用连电脑、不用拷文件。手机上导曲子、换开机图都太麻烦，"
-    "这两个入口从 v2.18 起取消了，直接把曲子带够。若程序目录（或 曲 目录）里有同名"
-    "mp3 / ogg / wav，会优先用文件、没有就用程序合成的旋律顶上。音效同理：音效 目录放 "
-    "select.wav / 落子.wav / 吃子.wav / 将军.wav / 胜利.wav 即替换内置音效。",
+    "【背景曲】内置 6 首：来日方长、梁祝是随安装包一起装好的真曲子（一点就响），"
+    "高山流水 / 平沙落雁 / 渔舟唱晚 / 广陵散 是程序现场合成的旋律。"
+    "自己再加：把 mp3 / ogg / wav 放进「内部存储/中国象棋/曲」文件夹（没有就新建），"
+    "文件名即曲名，回来打开设置就能看到。设置面板最多列 8 首，内置已占 6 格。"
+    "音量滑块拖动时立即生效；音效同理：音效 目录放 select.wav / 落子.wav / 吃子.wav / "
+    "将军.wav / 胜利.wav 即替换内置音效。",
     "【开机画面】开机最早那一闪「楚汉象棋·一局定天下」是打进安装包的古典图，装好后换不了；"
     "它后面不再有入场动画，直接就是主页，所以启动比以前快。手机上换图、换曲子都取消了，"
     "不用再折腾文件目录。",
     "【退出】按 Esc、点底部「返回」或点窗口关闭键都不会直接退出：浮层先关，"
     "对局先回主页；回到主页再点右下角「退出」才真正结束程序（手机上是回手机桌面）。",
-    "【升级安装】手机换新版安装包时，系统若提示「签名不一致 / 无法覆盖安装」，"
-    "是两版安装包签名不同，不是程序坏了。处理办法：先在残局库点「导出库」把库存到"
-    "手机别的目录（卸载会清掉应用内的残局库.json、自定义曲子和音效），"
-    "再在手机设置里卸载旧版，然后装新版，装完用「导入库」把库恢复即可。"
-    "同一签名之后的版本都能直接覆盖安装，不必再卸。",
+    "【升级安装】从 v2.19 起安装包用固定签名，以后新版直接覆盖安装就行，不必卸载，"
+    "残局库、通关标记、自己存的局都留着。只有从 v2.18 及更早版本升到 v2.19 这最后一次，"
+    "系统会提示签名不一致，需要先卸载旧版：卸载前到残局库点「导出库」，"
+    "手机版会存进系统「下载」目录（文件管理器能看到，卸载不会清掉），"
+    "装完新版点「导入库」找回即可。",
     "快捷键：E 摆棋 · U 悔棋 · P 复盘 · H 提示 · G 棋谱 · L 残局库 · M 音乐 · "
     "R 重开 · 1/2 示例与开局 · Esc 返回。本说明能用鼠标翻：滚轮上下、点「上一页 / 下一页」，"
     "点正文左半往回、右半往前；也可以用 ← → 或 PgUp / PgDn。",
@@ -6553,11 +6685,19 @@ def help_paras():
                  "手机的返回键也一样：先关浮层、再回主页。"
                  "回到主页后点右下角「退出」即回手机桌面（不用再靠上滑手势）。")
         elif p.startswith("【背景曲】"):
-            p = ("【背景曲】内置五首合成古曲：高山流水 / 平沙落雁 / 渔舟唱晚 / 广陵散 / 梁祝，"
-                 "设置面板点曲名就换，不用连电脑、不用拷文件。手机上导曲子、换开机图都太麻烦，"
-                 "这两个入口 v2.18 起取消了，直接把曲子带够。")
+            p = ("【背景曲】内置 6 首：来日方长、梁祝是真曲子（随包已装好），"
+                 "高山流水 / 平沙落雁 / 渔舟唱晚 / 广陵散 是现场合成。"
+                 "设置里点曲名就换。自己加曲子：把 mp3 / ogg / wav 放进"
+                 "「内部存储/中国象棋/曲」（没有就新建，文件管理器或数据线都能进），"
+                 "文件名就是曲名。首次启动会弹一次存储权限，允许才能读那个目录；"
+                 "不给也只影响自己加的曲子。面板最多列 8 首，内置已占 6 格。")
         elif p.startswith("【导入】"):
             p = p.replace("或点「选文件」挑 棋谱 目录里的 .txt；", "")
+        elif p.startswith("【升级安装】"):
+            p = ("【升级安装】从 v2.19 起安装包用固定签名，以后新版直接覆盖安装，不必卸载，"
+                 "残局库和通关标记都留着。只有从 v2.18 及更早升到 v2.19 这最后一次需要卸载："
+                 "先到残局库点「导出库」，文件会存进系统「下载」目录（文件管理器能看到，"
+                 "卸载不会清掉），装完新版点「导入库」找回。")
         elif p.startswith("【开机画面】"):
             p = ("【开机画面】开机最早那一闪「楚汉象棋·一局定天下」是打进安装包的古典图，装好后换不了；"
                  "它后面不再有入场动画，直接就是主页，启动比以前快。手机上换图、换曲子都取消了，"
@@ -7255,6 +7395,7 @@ def wait_library():
 
 
 def main():
+    boot_mark("进入 main")
     # 触屏：让 SDL 把手指事件同时映射成鼠标事件，整套点选逻辑不用改
     os.environ.setdefault("SDL_TOUCH_MOUSE_EVENTS", "1")
     os.environ.setdefault("SDL_MOUSE_TOUCH_EVENTS", "1")
@@ -7262,6 +7403,7 @@ def main():
     os.environ.setdefault("SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS", "0")
     pygame.mixer.pre_init(SAMPLE_RATE, -16, 2, 512)
     pygame.init()
+    boot_mark("pygame.init 完成（含音频设备）")
 
     sounds = {}
     try:
@@ -7318,6 +7460,7 @@ def main():
         set_ui_mode(IS_ANDROID or min(win_w, win_h) >= 720, win_w, win_h)
     draw_w, draw_h, off_x, off_y = fit_layout(win_w, win_h)
     screen = pygame.Surface((SCREEN_W, SCREEN_H))
+    boot_mark("窗口 / 画布就绪")
     pygame.display.set_caption("%s v%s · 计时对弈" % (APP_NAME, VERSION))
     try:                                   # 窗口左上角图标（缺文件不影响运行）
         pygame.display.set_icon(pygame.image.load(_asset("图标.png")))
@@ -7836,21 +7979,45 @@ def main():
         beep("select")
 
     def export_library():
-        """把整库导出成 JSON 文件"""
+        """把整库导出成 JSON 文件。手机上写进系统「下载」，卸载重装也还在。"""
+        n = len(S["entries"])
+        data = json.dumps(S["entries"], ensure_ascii=False, indent=2).encode("utf-8")
+        if IS_ANDROID:
+            where = save_to_downloads("中国象棋_残局库.json", data)
+            if where:
+                S["edit_msg"] = "已导出 %d 局 → %s" % (n, where)
+                S["message"] = ("残局库已存到「%s」（手机文件管理 / 数据线都能看到，"
+                                "卸载重装不会清掉）。装完新版点「导入库」找回。" % where)
+                beep("select")
+                return
+            # MediaStore 不可用（个别 ROM 受限）：退到外部私有目录，至少 adb 能取
+            base = extern_files_dir() or _BASE_DIR
+            path = os.path.join(base, "残局库_导出.json")
+            try:
+                with open(path, "wb") as fp:
+                    fp.write(data)
+            except OSError as exc:
+                S["edit_msg"] = "导出失败：%s" % exc
+                beep("illegal")
+                return
+            S["edit_msg"] = "已导出 %d 局 → 应用外部目录" % n
+            S["message"] = ("残局库已写到 %s（这个目录手机上一般看不到，"
+                            "数据线 + adb 可取出）。" % path)
+            beep("select")
+            return
         path = pick_library_file(save=True)
         if not path:
             S["edit_msg"] = "已取消导出。"
             beep("illegal")
             return
         try:
-            with open(path, "w", encoding="utf-8") as fp:
-                json.dump(S["entries"], fp, ensure_ascii=False, indent=2)
+            with open(path, "wb") as fp:
+                fp.write(data)
         except OSError as exc:
             S["edit_msg"] = "导出失败：%s" % exc
             beep("illegal")
             return
-        S["edit_msg"] = "已导出 %d 局 → %s" % (len(S["entries"]),
-                                             os.path.basename(path))
+        S["edit_msg"] = "已导出 %d 局 → %s" % (n, os.path.basename(path))
         beep("select")
 
     def import_library():
@@ -7897,38 +8064,55 @@ def main():
                          % (added, skipped, len(S["entries"])))
         beep("select")
 
-    def stop_bgm():
-        """立刻停掉正在响的背景音符，并清空调度状态（下次开启从头循环）"""
-        S["bgm_state"] = {}
+    def _stop_bgm_playback():
+        """停掉两路播放：合成的音符通道 + 流式的文件音乐（不动调度状态）"""
         try:
             pygame.mixer.Channel(BGM_CHANNEL).stop()
         except (pygame.error, AttributeError):
             pass
+        try:
+            pygame.mixer.music.stop()
+        except (pygame.error, AttributeError):
+            pass
+        _MUSIC_STATE["path"] = None
+
+    def stop_bgm():
+        """立刻停掉正在响的背景音乐，并清空调度状态（下次开启从头循环）"""
+        S["bgm_state"] = {}
+        _stop_bgm_playback()
 
     def bgm_tick():
         """背景古曲循环播放：每帧调度下一音符，曲目切换时自动重头循环。
-        曲 目录里有同名音频（wav / ogg / mp3）时，直接用文件循环，不再合成。
-        v2.18：不再依赖 sounds 字典是否为空（音效已改成按需生成）。"""
+        曲 目录里有同名音频（wav / ogg / mp3）时，用文件流式循环，不再合成。
+        v2.19：文件曲改走 mixer.music（边读边解码），
+        不再把整首解成 PCM 塞进内存，说明页滚动时不再一顿一顿。"""
         if not S["bgm_on"]:
             return
         ch = pygame.mixer.Channel(BGM_CHANNEL)
         now = time.perf_counter()
         st = S["bgm_state"]
+        vol = max(0.0, min(1.0, S["music_vol"]))
         if st.get("name") != S["bgm"]:
             st["name"] = S["bgm"]
             st["idx"] = 0
             st["next_time"] = now + 0.05
             st["user"] = load_user_music(S["bgm"])
+            _stop_bgm_playback()          # 换曲先停掉上一首（两条路都停）
+        path = st.get("user")
+        if path:
             try:
-                ch.stop()                 # 换曲先停掉上一首
-            except pygame.error:
-                pass
-        if st.get("user") is not None:
-            vol = max(0.0, min(1.0, S["music_vol"]))
-            if not ch.get_busy():
-                ch.play(st["user"], loops=-1)
-            ch.set_volume(vol)            # 拖音量滑块立刻生效，不必等换曲
-            return
+                if _MUSIC_STATE.get("path") != path:
+                    pygame.mixer.music.load(path)
+                    _MUSIC_STATE["path"] = path
+                    pygame.mixer.music.play(-1)
+                elif not pygame.mixer.music.get_busy():
+                    pygame.mixer.music.play(-1)
+                pygame.mixer.music.set_volume(vol)
+                return
+            except (pygame.error, OSError):
+                # 文件解不了（格式刁钻 / 文件损坏）就退回合成旋律，不出声总比崩了好
+                st["user"] = None
+                _MUSIC_STATE["path"] = None
         track = BGM_TRACKS.get(S["bgm"])
         if not track:
             return
@@ -8715,6 +8899,7 @@ def main():
     try:
         draw_home(screen, S["bgm"])
         present()
+        boot_mark("主页首帧已上屏")
     except (pygame.error, AttributeError):
         pass
 
@@ -8729,6 +8914,13 @@ def main():
     frame_no = 0
     while running:
         frame_no += 1
+        if frame_no == 2:
+            boot_mark("主循环第 2 帧")
+            boot_flush()          # 写到 Android/data/.../files/启动耗时.txt
+        elif frame_no == 90 and IS_ANDROID:
+            # 主菜单稳下来之后（约 1.5 秒）再申请存储权限，不跟启动抢时间。
+            # 拿到权限后才能读「内部存储/中国象棋/曲」；拿不到就只用内置曲。
+            request_storage_permissions()
         if S.get("quit_requested"):
             running = False
             break

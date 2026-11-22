@@ -10,10 +10,10 @@ package.domain = org.songyq
 # 源码目录：本文件所在目录（main.py + xiangqi.py + 素材）
 source.dir = .
 source.include_exts = py,png,jpg,jpeg,json,ttf,otf,wav,ogg,mp3
-source.exclude_patterns = icon_src.png,启动日志.txt,*.pyc
-source.exclude_dirs = bin,__pycache__,.github
+source.exclude_patterns = icon_src.png,启动日志.txt,*.pyc,象棋设置.json,*.bak*,*.log
+source.exclude_dirs = bin,__pycache__,.github,keystore
 
-version = 2.18
+version = 2.19
 
 # pygame 走 python-for-android 的 sdl2 引导层
 # 必须钉版本：p4a 的 pygame recipe 默认拉 pygame 2.1.0，它 include 的
@@ -35,7 +35,10 @@ orientation = portrait
 fullscreen = 1
 
 # 不需要任何权限：不联网、不读短信、不碰相册（保持默认空权限）
-# android.permissions = INTERNET
+# v2.19：只为读「内部存储/中国象棋/曲」里用户自己放的曲子。
+# Android 12 及以下用 READ_EXTERNAL_STORAGE，13+ 用 READ_MEDIA_AUDIO；
+# 用户拒绝也不影响启动，曲目退回内置的几首。
+android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,READ_MEDIA_AUDIO
 
 android.api = 33
 android.minapi = 21
@@ -43,7 +46,7 @@ android.ndk_api = 21
 # 钉 NDK 版本：不写这一行，buildozer 会挑最新 NDK，与 p4a 的 recipe 不匹配
 android.ndk = 25b
 android.archs = arm64-v8a
-android.numeric_version = 21800
+android.numeric_version = 21900
 android.accept_sdk_license = True
 android.allow_backup = True
 
