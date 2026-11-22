@@ -561,7 +561,7 @@ def load_font(size):
 
 
 # ---------------------------- 版本 / 创作者 / 设置项 ----------------------------
-VERSION = "2.21"
+VERSION = "2.22"
 APP_NAME = "中国象棋-智算单机版"
 CREATOR = "songyq"     # 主页右下角标注；
 TIME_OPTIONS = [5, 10, 20, 30, 60]    # 对战时间（分钟）
@@ -2079,6 +2079,7 @@ _BUNDLED_AUDIO = {
     "梁祝":     ("bgm_liangzhu", "梁祝"),
     "来日方长": ("bgm_lairifangchang", "来日方长"),
 }
+_ALIAS_TO_CANON = {a: c for c, aliases in _BUNDLED_AUDIO.items() for a in aliases}
 _MUSIC_CACHE = {}
 _MUSIC_STATE = {"path": None}     # 当前 mixer.music 里装的是哪个文件（流式播放用）
 
@@ -2201,6 +2202,7 @@ def request_storage_permissions():
         return
     try:
         request_permissions(want)
+        _MUSIC_CACHE.clear()   # v2.22：授权后重新找曲子，别吃之前的「没找到」
     except Exception:
         pass
 
@@ -2251,6 +2253,35 @@ def _name_candidates(nm):
     return out
 
 
+def _audio_files_in(d):
+    """列出目录及一层子目录里的音频，返回 [(曲名, 完整路径)]。
+    v2.22：有人把曲子直接放「中国象棋」根目录，有人放它的「曲」子目录，
+    编译时新增的曲子又可能落在别的子目录——三种都收，不再挑路径。"""
+    out = []
+    try:
+        entries = sorted(os.listdir(d))
+    except OSError:
+        return out
+    for fn in entries:
+        stem, ext = os.path.splitext(fn)
+        stem = stem.strip()
+        if ext.lower() in AUDIO_EXTS and stem:
+            out.append((stem, os.path.join(d, fn)))
+    for sub in entries:
+        sd = os.path.join(d, sub)
+        if sub.startswith(".") or not os.path.isdir(sd):
+            continue
+        try:
+            for fn in sorted(os.listdir(sd)):
+                stem, ext = os.path.splitext(fn)
+                stem = stem.strip()
+                if ext.lower() in AUDIO_EXTS and stem:
+                    out.append((stem, os.path.join(sd, fn)))
+        except OSError:
+            continue
+    return out
+
+
 def find_audio(folder, names):
     """按名找音频文件（wav / ogg / mp3），找不到返回 None。
 
@@ -2272,6 +2303,11 @@ def find_audio(folder, names):
                     path = os.path.join(base, cand + ext)
                     if os.path.exists(path):
                         return path
+            # v2.22：一层子目录兜底（编译时新增的曲子可能随包落在别的子目录）
+            for d in (os.path.join(base, folder), base):
+                for stem, path in _audio_files_in(d):
+                    if stem in _name_candidates(nm) and os.path.exists(path):
+                        return path
     return None
 
 
@@ -2282,22 +2318,23 @@ def music_library():
     v2.20：随包内置曲（梁祝 / 来日方长）也登记进来——它们打在资源根目录，
     中文名子目录扫不到，这里显式把识别到的内置曲补进曲目表。"""
     names = []
+    pub = public_storage_dir()
+    ex = extern_files_dir()
     for base in _audio_bases():
-        d = os.path.join(base, MUSIC_DIR)
-        if not os.path.isdir(d):
-            continue
-        try:
-            files = sorted(os.listdir(d))
-        except OSError:
-            continue
-        for fn in files:
-            stem, ext = os.path.splitext(fn)
-            stem = stem.strip()
-            if ext.lower() in AUDIO_EXTS and stem and stem not in names:
-                names.append(stem)
-    # 内置随包曲：查得到文件就把规范中文曲名加进去（去重）
-    for canonical in _BUNDLED_AUDIO:
-        if canonical not in names and find_audio(MUSIC_DIR, (canonical,)):
+        dirs = [os.path.join(base, MUSIC_DIR)]
+        # 公共目录「内部存储/中国象棋」：曲子直接放根目录或 曲/ 子目录都认
+        if base == pub or base == ex:
+            dirs.insert(0, base)
+        for d in dirs:
+            if not os.path.isdir(d):
+                continue
+            for stem, _path in _audio_files_in(d):
+                stem = _ALIAS_TO_CANON.get(stem, stem)   # bgm_liangzhu -> 梁祝
+                if stem and stem not in names:
+                    names.append(stem)
+    # 内置随包曲：查得到文件就补规范中文曲名，ASCII 别名不单独列一条
+    for canonical, aliases in _BUNDLED_AUDIO.items():
+        if canonical not in names and find_audio(MUSIC_DIR, aliases):
             names.append(canonical)
     return names
 
@@ -3839,21 +3876,43 @@ def record_text(state, reason=""):
     return "\n".join(lines)
 
 
-def export_record(state):
-    """把棋谱写到程序目录下的 棋谱/ 文件夹，返回 (成功, 路径或错误)"""
+def export_record(state, custom=None):
+    """把棋谱写到 棋谱/ 文件夹，返回 (成功, 路径或错误)。
+    v2.22：可以自己起名；手机上优先写「内部存储/中国象棋/棋谱」，
+    文件管理器 / 数据线都能看到，再拿「导入」选回来逐步演示。"""
     if not state["history"]:
         return False, "还没有走过棋，暂时没有棋谱可导出。"
-    folder = os.path.join(_BASE_DIR, "棋谱")
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    source = (custom or "").strip() or state["position"]
+    safe = "".join(ch for ch in source if ch not in '\\/:*?"<>| ')[:24]
+    filename = "棋谱_%s_%s.txt" % (safe or "对局", stamp)
+    content = record_text(state)
+    local_path = ""
     try:
+        folder = os.path.join(_BASE_DIR, "棋谱")
         os.makedirs(folder, exist_ok=True)
-        stamp = time.strftime("%Y%m%d-%H%M%S")
-        safe = "".join(ch for ch in state["position"] if ch not in '\\/:*?"<>| ')[:12]
-        path = os.path.join(folder, "棋谱_%s_%s.txt" % (safe or "对局", stamp))
-        with open(path, "w", encoding="utf-8") as fp:
-            fp.write(record_text(state))
-    except OSError as exc:
-        return False, "导出失败：%s" % exc
-    return True, path
+        local_path = os.path.join(folder, filename)
+        with open(local_path, "w", encoding="utf-8") as fp:
+            fp.write(content)
+    except OSError:
+        pass
+    if IS_ANDROID:
+        pub = public_storage_dir()
+        if pub:
+            try:
+                d = os.path.join(pub, "棋谱")
+                os.makedirs(d, exist_ok=True)
+                with open(os.path.join(d, filename), "w", encoding="utf-8") as fp:
+                    fp.write(content)
+                return True, PUBLIC_DIR + "/棋谱/" + filename
+            except OSError:
+                pass
+        where = save_to_downloads(filename, content.encode("utf-8"))
+        if where:
+            return True, where
+    if local_path:
+        return True, local_path
+    return False, "导出失败：找不到可写的目录"
 
 
 def _packed_library():
@@ -4120,6 +4179,41 @@ def stamp_day(ts):
     """存盘时间取「月-日」，行内只放得下这么宽"""
     m = re.match(r"^\d{4}-(\d{2})-(\d{2})", ts or "")
     return "%s-%s" % (m.group(1), m.group(2)) if m else ""
+
+
+def android_pick_file(kinds=("json",)):
+    """安卓没有 tkinter 文件对话框。改从用户真能看到的目录里挑最新的候选文件：
+    内部存储/中国象棋/棋谱 → 内部存储/中国象棋 → 下载 → 应用私有 files。
+    返回 (路径, 找不到时的提示)。v2.22：根治「点导入没反应」。"""
+    if not IS_ANDROID:
+        return "", ""
+    pub = public_storage_dir()
+    ext = os.environ.get("EXTERNAL_STORAGE") or "/storage/emulated/0"
+    dirs = []
+    if pub:
+        dirs += [os.path.join(pub, "棋谱"), pub]
+    dirs += [os.path.join(ext, "Download"), os.path.join(ext, "Downloads")]
+    ex = extern_files_dir()
+    if ex:
+        dirs += [ex, os.path.join(ex, "棋谱")]
+    suffixes = (".json",) if tuple(kinds) == ("json",) else (".txt", ".fen", ".json")
+    found = []
+    for d in dirs:
+        try:
+            for fn in os.listdir(d):
+                ext = os.path.splitext(fn)[1].lower()
+                if ext in suffixes:
+                    path = os.path.join(d, fn)
+                    if os.path.isfile(path):
+                        found.append((suffixes.index(ext), os.path.getmtime(path), path))
+        except OSError:
+            continue
+    if not found:
+        return "", ("没找到可导入的文件。先把文件拷进「内部存储/中国象棋/棋谱」"
+                    "再点这个按钮（放「下载」里也行）。")
+    # 单盘棋谱优先 txt / fen，避免误挑到残局库 json（那是「导入库」用的）
+    found.sort(reverse=True)
+    return found[0][2], ""
 
 
 def pick_library_file(save=False):
@@ -5062,18 +5156,25 @@ def refresh_overlays():
     在长屏上会只占上半个屏幕、下半个空着。这里统一重算一遍。"""
     global OVERLAY_PANEL, OVERLAY_CLOSE, SETTINGS_PANEL
     global HELP_PANEL, HELP_CLOSE, HELP_PREV, HELP_NEXT, HELP_TEXT_TOP, HELP_TEXT_BOTTOM
+    global HELP_FONT_SIZE, HELP_LH
     global LIB_PAGE_SIZE, LIB_PANEL_TOP
     OVERLAY_PANEL = pygame.Rect(36, 64, SCREEN_W - 72, max(560, SCREEN_H - 136))
     OVERLAY_CLOSE = pygame.Rect(OVERLAY_PANEL.right - 42, OVERLAY_PANEL.y + 12, 30, 30)
     SETTINGS_PANEL = pygame.Rect(OVERLAY_PANEL.x, 70,
                                  OVERLAY_PANEL.w, min(660, SCREEN_H - 150))
-    h = min(700, SCREEN_H - 90)
-    HELP_PANEL = pygame.Rect(36, (SCREEN_H - h) // 2, SCREEN_W - 72, h)
-    HELP_CLOSE = pygame.Rect(HELP_PANEL.right - 42, HELP_PANEL.y + 12, 30, 30)
-    HELP_PREV = pygame.Rect(HELP_PANEL.x + 24, HELP_PANEL.bottom - 40, 96, 30)
-    HELP_NEXT = pygame.Rect(HELP_PANEL.right - 120, HELP_PANEL.bottom - 40, 96, 30)
-    HELP_TEXT_TOP = HELP_PANEL.y + 76
-    HELP_TEXT_BOTTOM = HELP_PANEL.bottom - 56
+    # v2.22：说明页改成 nearly 全屏（四周只留 12px），字号整体加一档。
+    # 手机上一页能看更多字，少翻页；翻页键与关闭键同步放大给手指用。
+    h = SCREEN_H - 24
+    HELP_PANEL = pygame.Rect(12, 12, SCREEN_W - 24, h)
+    _cs = 38 if UI_BIG else 32
+    HELP_CLOSE = pygame.Rect(HELP_PANEL.right - 12 - _cs, HELP_PANEL.y + 12, _cs, _cs)
+    _bw, _bh = (128, 44) if UI_BIG else (104, 32)
+    HELP_PREV = pygame.Rect(HELP_PANEL.x + 24, HELP_PANEL.bottom - _bh - 14, _bw, _bh)
+    HELP_NEXT = pygame.Rect(HELP_PANEL.right - _bw - 24, HELP_PANEL.bottom - _bh - 14, _bw, _bh)
+    HELP_TEXT_TOP = HELP_PANEL.y + (92 if UI_BIG else 78)
+    HELP_TEXT_BOTTOM = HELP_PANEL.bottom - (_bh + 38)
+    HELP_FONT_SIZE = 16 if UI_BIG else 15
+    HELP_LH = 26 if UI_BIG else 23
 
     # 残局库：长屏一屏多放几行，面板上下居中，底下的「上一页 / 下一页」跟着下去
     def _lib_h(n):
@@ -5667,7 +5768,8 @@ def draw_naming_overlay(screen, name_buf, caret_on, mode="save", turn=RED, detai
     draw_rect(screen, C((252, 249, 242)), panel, 0, 12)
     draw_rect(screen, C((34, 150, 96)), panel, 2, 12)
 
-    caption = "重命名残局" if mode == "rename" else "给这局残局起个名字"
+    caption = ("重命名残局" if mode == "rename" else
+               "给棋谱起个名字" if mode == "record" else "给这局残局起个名字")
     title = load_font(23 if UI_BIG else 17).render(caption, True, C((58, 50, 40)))
     screen.blit(title, (panel.x + 16, panel.y + 14))
 
@@ -5722,6 +5824,10 @@ def draw_naming_overlay(screen, name_buf, caret_on, mode="save", turn=RED, detai
         tips = ["点「改名」确认，「返回」不改。"]
         if not UI_BIG:
             tips = ["回车确认，Esc 取消；改名不影响局面、收藏与通关记录。"]
+    elif mode == "record":
+        tips = (["点「保存」导出棋谱，存到 内部存储/中国象棋/棋谱/。",
+                 "名字可以留空，留空就用当前局面名。"] if UI_BIG else
+                ["点「保存」导出棋谱；留空则用当前局面名。"])
     else:
         if UI_BIG:
             tips = ["点「保存」存进残局库，点「返回」不存。",
@@ -6666,103 +6772,43 @@ HELP_PREV = pygame.Rect(HELP_PANEL.x + 24, HELP_PANEL.bottom - 40, 96, 30)
 HELP_NEXT = pygame.Rect(HELP_PANEL.right - 120, HELP_PANEL.bottom - 40, 96, 30)
 HELP_TEXT_TOP = HELP_PANEL.y + 76
 HELP_TEXT_BOTTOM = HELP_PANEL.bottom - 56
-HELP_FONT_SIZE = 14
-HELP_LH = 21
+HELP_FONT_SIZE = 15
+HELP_LH = 23
 
 HELP_PARAS = [
-    "欢迎使用《中国象棋·智算单机版 v%s》—— 计时对弈与残局研究。" % VERSION,
-    "【两个版本】同一份程序，规则、AI、残局库、按钮文案完全一致，只在「怎么操作」上各让一步。"
-    "安卓版：竖屏全屏、手指点选；底栏排成两排——上排 悔棋/提示/复盘/存局/返回主菜单，"
-    "下排 认输/提和/棋谱/重开，格子比桌面版大一号，拇指够得着；开机闪一张古典图就直接进主页，"
-    "不再放看不见的过场动画；设置、残局库都存在应用私有目录，不占相册、不用存储权限；"
-    "内置 6 首可选：《梁祝》《来日方长》是真曲子随包装好，另有四首合成古曲；"
-    "桌面版：窗口可缩放，鼠标右键摆棋删子；键盘 Esc 关浮层、回车确认；"
-    "存档、棋谱都在 exe 旁边，拷走就能搬去另一台机器。"
-    "一句话：手机上胜在随手就能下，桌面上胜在摆棋、整理谱子方便。",
-    "【对战】红方先行：点棋子再点落点，绿点可走、红圈可吃；电脑执黑，每方限时包干。"
-    "轮到哪方走，他的将/帅旁边就亮起一只单步计时圆表：十二个刻度像座钟，指针一圈"
-    "走完这一手的限时，圈心写这手还剩几秒，旁边一句「该你走」/「思考中…」；"
-    "不走的一方不画表。将死、困毙定胜负；子力不足（双方只剩将帅士象，至多各一匹单马）"
-    "立刻判和，不再磨到六十回合。六十回合无吃子判和。同一局面第 3 次出现时"
-    "按整轮循环裁决：哪一方每一着都在将军，哪一方判长将负（被连将、只能来回躲帅的一方"
-    "不受罚）；双方都不将军则判和。走子前会先拦住重复，留出换着法的余地；"
-    "电脑也会另择路线，不主动长将。",
-    "【和棋】除了规则判和，程序会自己开口提和：盘上只剩 8 枚子以内、或连续 40 个"
-    "半回合没吃子、或同一局面反复出现，而它也没占到便宜时，会弹窗把盘面说清楚"
-    "（我剩什么子、你剩什么子、多少回合没吃子），话很直白，不讲条文。"
-    "点「同意和棋」就握手言和、这一局到此结束；点「继续下」接着走，"
-    "过了几手它可能再提一次（间隔一次比一次长，约 6 / 12 / 18 个回合），一局最多提三回，"
-    "第三回被拒就不再提。弹窗开着时计时暂停，慢慢看、慢慢决定；"
-    "您也可以点「提和」主动找它和，它觉得自己没占到明显便宜就会答应。",
-    "【认输】它只剩光杆老将、您手上还有车能破防时，先低头求和："
-    "答应就和棋；不答应它就再撑 3 个回合，然后弹「认输」。认输弹窗里点"
-    "「继续下」，这局就不算完 —— 它不再提和也不再认输，非得您把将吃掉（将死）才结束。",
-    "【单步限时】设置面板与对战顶部栏的「步限」按钮都能调：不限 / 15 / 30 / 60 秒。"
-    "选「不限」时圆表只正计时（指针 60 秒一圈，圈心写这一手用了多久）；设了限时则倒计时，"
-    "剩 10 秒内圆表转红，一圈走完还没落子即判单步超时负。",
-    "【残局】按 全部 / 经典残局 / 江湖排局 / 自定残局 / 收藏 切换；每行开头是编号"
-    "（100 局以后是三位数，照样不挤），行尾 ★ 收藏、× 删除（点两次确认）；"
-    "行内标「已通关 / 黑先 / 子数」和存盘日期。"
-    "底下一行两个筛选按钮：「阶段」按盘上棋子多少分成 全部 / 开局 / 中局 / 残局"
-    "（双方合计 20 子以上算开局，11-19 子算中局，10 子以下才算残局），"
-    "想练开局还是专挑残局一眼就能分开；"
-    "「难度」按钮按先手方（解题那方）的处境把每局分成 简单 / 中等 / 困难："
-    "先手方子力领先得多、或有一眼就能看到的直接杀着，算简单；少子硬做、第一步就被将军、"
-    "盘上着法又多得挑不出唯一正解，算困难。行号后面那道竖线就是难度色：绿 / 橙 / 红。"
-    "搜索框里敲数字按局号找：输 94 能搜到「第094局」，输 3 也能定位列表第 3 条。"
-    "↑↓ 逐行、PgUp/PgDn 整屏、Home/End 到两端；"
-    "「导出库 / 导入库」备份或合并整库，写库前留 3 份 .bak；"
-    "「恢复」用最近一份备份盖回当前库（4 秒内点两次才执行，覆盖前会把当前库另存一份），"
-    "改乱了、误删了一片，点它就能退回去；"
-    "导入按「局面 + 先行方」去重，同一个局面换个名字也不会重复堆一遍。",
-    "【存局】对战、残局、摆棋都能存：底部「存局」（摆棋里「保存」），先按规则校验，"
-    "再起名字，存入「自定残局」分类。",
-    "【摆棋】棋子摆一枚少一枚。双方各须一枚将/帅、除将帅外至少一枚子，"
-    "士象车马炮每方最多 2 枚、兵卒最多 5 枚；落点须合法（将帅士不出九宫、象不过河、"
-    "兵卒不后退），将帅不得照面。",
-    "【导入】粘贴整份棋谱全文（自动回放到最后一手）、FEN 或 JSON，或点「选文件」"
-    "挑 棋谱 目录里的 .txt；载入后从最后一手接着下。对战中按 Esc 只回主页、不再存半局，"
-    "要保局请在对局中点「存局」存进残局库（自定残局）。",
-    "【走子】两种手法都行：点一下棋子再点落点；或者按住棋子直接拖到落点松手"
-    "（拖动时棋子跟着鼠标走，落点有绿点提示）。走子有滑行动画，被吃的子会淡出，"
-    "落定后荡开一圈涟漪；落子声上三路清脆、下三路低沉，听着像在真棋盘上敲。"
-    "电脑算完不会立刻落子，至少「想」半秒，看得清它走哪。",
-    "【对局按钮】手机上下两排：上排 悔棋 / 提示 / 复盘 / 存局 / 返回主菜单，"
-    "下排 认输 / 提和 / 棋谱 / 重开（桌面是一排九个）；"
-    "「提示」在后台深搜一手建议并标在棋盘上（约四五秒，界面不卡）；"
-    "「提和」由电脑按形势决定；「音乐」开关挪到顶栏、紧挨着「音效」；"
-    "「返回主菜单」等于退出这一局回主页，不存半局；"
-    "悔棋次数可在设置里限定为不限 / 三次 / 五次。",
-    "【难度】简单 / 普通 / 困难 / 大师四档：简单会随手走错，普通偶尔失手，"
-    "困难与大师不失手、算得更深（大师每步最多算 8 层，约 5.5 秒），越往后防守越紧。"
-    "v2.3 的电脑开局会照谱走（中炮、仙人指路、飞相、起马等常见开法都有应对），"
-    "中局搜索换成 PVS + 后期着法削减 + 空着裁剪，同样节点数比上一版少算一成，"
-    "折算下来同样时间能多算一两层；残局还会主动把对方将往边上赶，"
-    "车兵残局这类「赢了但不会杀」的局能收下来了。"
-    "走完一手后底部会写「电脑算到第 N 层」。",
-    "【设置】难度、音效与音乐开关、音量滑块、对战总时间、单步限时、背景曲、悔棋限制、"
-    "棋盘配色（原木 / 墨玉）都能调整并自动保存，墨玉下浮层也换成深色；"
-    "v2.18 起设置面板整体放大，标签、字号和按钮高度都提了一档，手指点着不费劲；"
-    "电脑改在后台思考，算棋时窗口照常响应。主页背景想换成自己的画：把图片命名成 主页背景.jpg 放在程序目录即可。",
-    "【背景曲】内置 6 首：来日方长、梁祝是随安装包一起装好的真曲子（一点就响），"
-    "高山流水 / 平沙落雁 / 渔舟唱晚 / 广陵散 是程序现场合成的旋律。"
-    "自己再加：把 mp3 / ogg / wav 放进「内部存储/中国象棋/曲」文件夹（没有就新建），"
-    "文件名即曲名，回来打开设置就能看到。设置面板最多列 8 首，内置已占 6 格。"
-    "音量滑块拖动时立即生效；音效同理：音效 目录放 select.wav / 落子.wav / 吃子.wav / "
-    "将军.wav / 胜利.wav 即替换内置音效。",
-    "【开机画面】开机最早那一闪「楚汉象棋·一局定天下」是打进安装包的古典图，装好后换不了；"
-    "它后面不再有入场动画，直接就是主页，所以启动比以前快。手机上换图、换曲子都取消了，"
-    "不用再折腾文件目录。",
-    "【退出】按 Esc、点底部「返回」或点窗口关闭键都不会直接退出：浮层先关，"
-    "对局先回主页；回到主页再点右下角「退出」才真正结束程序（手机上是回手机桌面）。",
-    "【升级安装】从 v2.19 起安装包用固定签名，以后新版直接覆盖安装就行，不必卸载，"
-    "残局库、通关标记、自己存的局都留着。只有从 v2.18 及更早版本升到 v2.19 这最后一次，"
-    "系统会提示签名不一致，需要先卸载旧版：卸载前到残局库点「导出库」，"
-    "手机版会存进系统「下载」目录（文件管理器能看到，卸载不会清掉），"
-    "装完新版点「导入库」找回即可。",
+    "欢迎使用《中国象棋·智算单机版 v%s》。这份说明按实际使用顺序写："
+    "从主页进去 → 下棋 → 看残局 → 存谱 / 导入演示 → 加曲子 → 升级安装。"
+    % VERSION,
+    "【主页】上去先看到五个大按钮：开始对战、残局库、摆棋、导入棋谱、设置、使用说明、退出。"
+    "手指直接点，按钮按手机拇指放大过；开机闪一张古典图就进主页，没有额外过场。",
+    "【下棋】红方先走：点自己的棋子，再点绿色落点；红圈表示能吃子。程序执黑，"
+    "轮到谁走，谁的将 / 帅旁边就亮一只圆表，指针转一圈是这一手的限时，圈心写剩余秒数。"
+    "底部上排：悔棋 / 提示 / 复盘 / 存局；下排：认输 / 提和 / 棋谱 / 重开。"
+    "「提示」让程序后台想一手标在盘上；「复盘」可以一步步回看。将死、困毙分胜负，"
+    "六十回合无吃子判和。",
+    "【残局库】主页点「残局库」进入。顶部能按 全部 / 经典残局 / 江湖排局 / 自定残局 / 收藏 切换，"
+    "旁边有搜索框（输局号或名字），还有「导出库 / 导入库 / 恢复」三个按钮。"
+    "点一行载入这一局；点行尾 ★ 收藏、× 删除（点两次确认）。"
+    "「导出库」把整库备份到「内部存储/中国象棋」或系统「下载」；"
+    "「导入库」会自动读这两个位置最新的 残局库 json，按局面去重合并。",
+    "【存局与摆棋】对战中点「存局」，摆棋里点「保存」，都能起名字存进「自定残局」，"
+    "以后在残局库里点开接着练。摆棋时棋子摆一枚少一枚，双方各须一枚将 / 帅，"
+    "士象车马炮每方最多两枚、兵卒最多五枚，将帅不能照面。",
+    "【棋谱与演示】对局中走完几步后点底部「棋谱」，先起个名字，"
+    "棋谱就存到「内部存储/中国象棋/棋谱」。想看演示：回主页点「导入棋谱」，"
+    "点「选文件」挑这份 txt（或把全文粘进框里点「导入」），载入后到对局中点「复盘」，"
+    "再点「自动」就会一着一着放给自己看；点「上一步 / 下一步」可以慢慢学。",
+    "【背景曲】设置里有 6 首内置曲：《梁祝》《来日方长》是随包装好的真曲子，"
+    "另外四首是程序现场合成。想加自己的曲子：把 mp3 / ogg / wav 放进"
+    "「内部存储/中国象棋」或它下面的「曲」文件夹，文件名就是曲名，"
+    "重新进设置就能看到。第一次启动会问一次存储权限，允许后才能读这个目录；"
+    "不给也只影响自己加的曲子，内置曲照常能放。",
+    "【升级安装】从 v2.19 起安装包用固定签名，新版直接覆盖安装，不必卸载，"
+    "已过关卡、通关标记、自己存的残局都留着。只有从 v2.18 及更早版本升上来那一次"
+    "要先卸载：卸载前到残局库点「导出库」，装完新版点「导入库」找回。",
+    "【桌面版】窗口可缩放，鼠标右键摆棋 / 删子；棋谱、存档都在 exe 旁边。"
     "快捷键：E 摆棋 · U 悔棋 · P 复盘 · H 提示 · G 棋谱 · L 残局库 · M 音乐 · "
-    "R 重开 · 1/2 示例与开局 · Esc 返回。本说明能用鼠标翻：滚轮上下、点「上一页 / 下一页」，"
-    "点正文左半往回、右半往前；也可以用 ← → 或 PgUp / PgDn。",
+    "R 重开 · 1/2 示例与开局 · Esc 返回。说明页可用滚轮或点「上一页 / 下一页」翻。",
 ]
 
 
@@ -6774,7 +6820,7 @@ def help_paras():
     out = []
     for para in HELP_PARAS:
         p = para
-        if p.startswith("快捷键"):
+        if p.startswith("快捷键") or p.startswith("【桌面版】"):
             continue
         p = p.replace("↑↓ 逐行、PgUp/PgDn 整屏、Home/End 到两端；", "")
         p = p.replace("搜索框里敲数字按局号找：输 94 能搜到「第094局」，"
@@ -6793,12 +6839,12 @@ def help_paras():
                  "手机的返回键也一样：先关浮层、再回主页。"
                  "回到主页后点右下角「退出」即回手机桌面（不用再靠上滑手势）。")
         elif p.startswith("【背景曲】"):
-            p = ("【背景曲】内置 6 首：来日方长、梁祝是真曲子（随包已装好），"
-                 "高山流水 / 平沙落雁 / 渔舟唱晚 / 广陵散 是现场合成。"
-                 "设置里点曲名就换。自己加曲子：把 mp3 / ogg / wav 放进"
-                 "「内部存储/中国象棋/曲」（没有就新建，文件管理器或数据线都能进），"
-                 "文件名就是曲名。首次启动会弹一次存储权限，允许才能读那个目录；"
-                 "不给也只影响自己加的曲子。面板最多列 8 首，内置已占 6 格。")
+            p = ("【背景曲】内置 6 首：梁祝、来日方长是真曲子（随包已装好），"
+                 "另外四首是现场合成，设置里点曲名就换。"
+                 "自己加曲子：把 mp3 / ogg / wav 放进「内部存储/中国象棋」，"
+                 "或者它下面的「曲」文件夹（没有就新建，文件管理器或数据线都能进），"
+                 "文件名就是曲名，重进设置就能看到。首次启动会问一次存储权限，"
+                 "允许才能读那个目录；不给也只影响自己加的曲子。")
         elif p.startswith("【导入】"):
             p = p.replace("或点「选文件」挑 棋谱 目录里的 .txt；", "")
         elif p.startswith("【升级安装】"):
@@ -6865,7 +6911,7 @@ def draw_instructions_overlay(screen, page=0, hover=None):
     p = HELP_PANEL
     draw_rect(screen, C((252, 249, 242)), p, 0, 14)
     draw_rect(screen, C((34, 150, 96)), p, 2, 14)
-    t = load_font_song(24).render("使　用　说　明", True, C((60, 48, 36)))
+    t = load_font_song(28 if UI_BIG else 25).render("使　用　说　明", True, C((60, 48, 36)))
     screen.blit(t, (p.centerx - t.get_width() // 2, p.y + 28))
     draw_rect(screen, C((232, 214, 208)), HELP_CLOSE, 0, 6)
     cross = load_font(18).render("×", True, C((168, 60, 54)))
@@ -6886,11 +6932,11 @@ def draw_instructions_overlay(screen, page=0, hover=None):
     if page < total - 1 and y < HELP_TEXT_BOTTOM - HELP_LH:
         more_text = ("↓ 后面还有 %d 页，点「下一页」继续看" if IS_ANDROID
                      else "↓ 后面还有 %d 页，点「下一页」或滚动滚轮继续看")
-        more = load_font(13).render(
+        more = load_font(15 if UI_BIG else 13).render(
             more_text % (total - page - 1), True, C((34, 150, 96)))
         screen.blit(more, (p.centerx - more.get_width() // 2, HELP_TEXT_BOTTOM - 6))
 
-    bfont = load_font(14)
+    bfont = load_font(17 if UI_BIG else 15)
     for rect, label, on in ((HELP_PREV, "< 上一页", page > 0),
                             (HELP_NEXT, "下一页 >", page < total - 1)):
         hot = bool(on and hover and rect.collidepoint(hover))
@@ -6904,9 +6950,9 @@ def draw_instructions_overlay(screen, page=0, hover=None):
         surf = bfont.render(label, True, fg)
         screen.blit(surf, (rect.centerx - surf.get_width() // 2,
                            rect.centery - surf.get_height() // 2))
-    num = load_font(15).render("第 %d / %d 页" % (page + 1, total), True, C((110, 96, 78)))
+    num = load_font(16).render("第 %d / %d 页" % (page + 1, total), True, C((110, 96, 78)))
     screen.blit(num, (p.centerx - num.get_width() // 2, HELP_PREV.centery - num.get_height() // 2))
-    tip = load_font(12).render("点左右翻页" if IS_ANDROID else "滚轮 / 点左右翻页",
+    tip = load_font(14 if UI_BIG else 12).render("点左右翻页" if IS_ANDROID else "滚轮 / 点左右翻页",
                                True, C((156, 144, 128)))
     screen.blit(tip, (HELP_CLOSE.x - 14 - tip.get_width(), p.y + 36))
     return total
@@ -7964,6 +8010,8 @@ def main():
         S["naming_mode"] = source
         S["naming"] = True
         S["name_fresh"] = (source == "rename")   # 改名：输入即替换旧名
+        if source == "record":
+            S["name_buf"] = (S["custom_name"] or S.get("position") or "对局")[:24]
         if source == "rename" and idx is not None:
             S["rename_idx"] = idx
             entry = S["entries"][idx]
@@ -8045,9 +8093,22 @@ def main():
             apply_rename()
         elif mode == "save":
             save_current()              # 命名后继续保存流程
+        elif mode == "record":
+            ok, info = export_record(S, S["name_buf"].strip())
+            S["message"] = ("棋谱已导出：%s　回主页点「导入」选回这份文件，"
+                            "再点「复盘」→「自动」就能演示。" % info) if ok else info
+            beep("select" if ok else "illegal")
         elif S["custom_name"]:
             S["edit_msg"] = "名称已设为「%s」，保存时生效。" % S["custom_name"]
             S["message"] = S["edit_msg"]
+
+    def start_record_export():
+        """点「棋谱」先起名再导出；没有着法时直接给出提示。"""
+        if not S["history"]:
+            S["message"] = "还没有走过棋，暂时没有棋谱可导出。"
+            beep("illegal")
+            return
+        open_naming("record")
 
     def paste_clipboard():
         try:
@@ -8094,6 +8155,7 @@ def main():
             where = save_to_downloads("中国象棋_残局库.json", data)
             if where:
                 S["edit_msg"] = "已导出 %d 局 → %s" % (n, where)
+                S["lib_io_msg"] = S["edit_msg"]
                 S["message"] = ("残局库已存到「%s」（手机文件管理 / 数据线都能看到，"
                                 "卸载重装不会清掉）。装完新版点「导入库」找回。" % where)
                 beep("select")
@@ -8130,11 +8192,19 @@ def main():
 
     def import_library():
         """从 JSON 文件导入整库（按名称 + 局面去重）"""
-        path = pick_library_file(save=False)
-        if not path:
-            S["edit_msg"] = "已取消导入。"
-            beep("illegal")
-            return
+        if IS_ANDROID:
+            path, why = android_pick_file(("json",))
+            if not path:
+                S["edit_msg"] = why
+                S["message"] = why
+                beep("illegal")
+                return
+        else:
+            path = pick_library_file(save=False)
+            if not path:
+                S["edit_msg"] = "已取消导入。"
+                beep("illegal")
+                return
         try:
             with open(path, "r", encoding="utf-8") as fp:
                 data = json.load(fp)
@@ -8252,6 +8322,7 @@ def main():
         S["home_overlay"] = name
         if name == "settings":
             S["settings_msg"] = ""        # 每次打开都干净起手，不带上次的回执
+            _MUSIC_CACHE.clear()          # v2.22：权限状态变了就重新扫公共目录
         if name == "instructions":
             S["help_page"] = 0            # 每次都从第一页看起
         if name == "import":
@@ -8343,7 +8414,7 @@ def main():
             S["lib_open"] = False
             S["import_buf"] = ""
             S["import_msg"] = ""
-            S["message"] = ("棋谱已导入（%s），可按「复盘」逐步看全谱。"
+            S["message"] = ("棋谱已导入（%s），点底部「复盘」→「自动」逐步演示。"
                             % (rec["note"] or "已解析") if moves
                             else "已导入棋谱里的起始局面（未找到可回放的着法）。")
             beep("select")
@@ -8390,11 +8461,18 @@ def main():
 
     def import_from_file():
         """选一个棋谱 / 局面文件，读出全文再走导入流程"""
-        path = pick_text_file()
-        if not path:
-            S["import_msg"] = "没有选中文件（或系统文件对话框不可用）。"
-            beep("illegal")
-            return
+        if IS_ANDROID:
+            path, why = android_pick_file(("txt", "json", "fen"))
+            if not path:
+                S["import_msg"] = why
+                beep("illegal")
+                return
+        else:
+            path = pick_text_file()
+            if not path:
+                S["import_msg"] = "没有选中文件（或系统文件对话框不可用）。"
+                beep("illegal")
+                return
         content = None
         for enc in ("utf-8-sig", "gbk", "utf-16"):
             try:
@@ -9024,8 +9102,11 @@ def main():
             # 而是等主页这一帧真的翻上屏幕才开始计时。闪屏盖着 / 主页没画出来时，
             # home_shown_at 仍是 None，所有触摸一律吞掉，页面就绪后才逐步放行。
             home_shown_at = time.perf_counter()
-            hard_gate_until = home_shown_at + 0.45
-            gate_deadline = home_shown_at + 1.2
+            # v2.22：主人实测「启动后期还会被点一下」。0.45 秒硬吞太短，
+            # 闪屏刚退、手指还在连点时门禁就放行了。改成 1.2 秒硬吞、
+            # 2.6 秒兜底，并要求静默 0.6 秒且没有手指按住才放行。
+            hard_gate_until = home_shown_at + 1.2
+            gate_deadline = home_shown_at + 2.6
             try:
                 pygame.event.clear()   # 主页翻上来这一刻把闪屏期攒的输入再清一次
             except pygame.error:
@@ -9047,6 +9128,11 @@ def main():
         if frame_no == 2:
             boot_mark("主循环第 2 帧")
             boot_flush()          # 写到 内部存储/中国象棋/启动耗时.txt
+        elif frame_no == 30 and IS_ANDROID and home_shown_at is None:
+            # 兜底：万一主页首帧绘制异常没设 home_shown_at，也不能永远吞掉触摸。
+            home_shown_at = time.perf_counter()
+            hard_gate_until = home_shown_at + 1.2
+            gate_deadline = home_shown_at + 2.6
         elif frame_no == 90 and IS_ANDROID:
             # 主菜单稳下来之后（约 1.5 秒）再申请存储权限，不跟启动抢时间。
             # 拿到权限后才能读「内部存储/中国象棋/曲」；拿不到就只用内置曲。
@@ -9109,7 +9195,7 @@ def main():
         # 安卓一次触摸会同时报 FINGER* 与 MOUSE*，全部纳入统计。放行的总开关是
         # home_shown_at：主页首帧真正翻上屏幕之前它一直是 None，这段时间的触摸
         # （闪屏还盖着、用户以为还没好就连敲）一律吞掉；主页上屏后再按
-        # 「硬吞 0.45 秒 + 没有按住 / 静默够 0.4 秒」逐步放行，最多 1.2 秒兜底。
+        # 「硬吞 1.2 秒 + 没有按住 / 静默够 0.6 秒」逐步放行，最多 2.6 秒兜底。
         # 残局库是后台线程慢慢读的，不再当作门禁条件——不该让人干等它而白锁屏幕。
         # 退出键 / QUIT / 窗口事件 / 系统返回键始终放行。
         if IS_ANDROID:
@@ -9119,7 +9205,7 @@ def main():
             _gating = _not_ready or (_now < gate_deadline and
                                      (_now < hard_gate_until
                                       or input_gate["down"] > 0
-                                      or _now - input_gate["last"] < 0.4))
+                                      or _now - input_gate["last"] < 0.6))
             if _gating:
                 for _ev in events:
                     if _ev.type in INPUT_DOWN_TYPES:
@@ -9381,9 +9467,7 @@ def main():
                                               int(S.get("lib_off", 0))))
                     beep("select")
                 elif event.key == pygame.K_g:
-                    ok, info = export_record(S)
-                    S["message"] = ("棋谱已导出：%s" % info) if ok else info
-                    beep("select" if ok else "illegal")
+                    start_record_export()
                 elif event.key == pygame.K_h:
                     give_hint()
                 elif event.key == pygame.K_u:
@@ -9868,9 +9952,7 @@ def main():
                     elif key == "draw":
                         offer_draw()
                     elif key == "export":
-                        ok, info = export_record(S)
-                        S["message"] = ("棋谱已导出：%s" % info) if ok else info
-                        beep("select" if ok else "illegal")
+                        start_record_export()
                     elif key == "restart":
                         reset_position(S["position"])
                     elif key == "home":
