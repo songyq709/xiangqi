@@ -2,184 +2,7 @@
 # pyright: reportMissingImports=false
 """中国象棋 · 智算单机版（Pygame 版）
 
-v2.20 改动（主人实测反馈）：
-  1) 看说明页时合成古曲卡顿、但真曲子不卡：根因是合成曲原来每帧只发一个音符，
-     重渲染界面一掉帧音符就接不上。现在后台线程把整首合成一次，
-     用 mixer.Sound.play(loops=-1) 交给音频线程连续循环，跟帧率彻底解耦。
-  2) 两首随包曲子装机后没出现：中文名放在 曲/ 子目录，打包 / 上传时容易丢。
-     改成打在资源根目录的 ASCII 文件（bgm_liangzhu.ogg / bgm_lairifangchang.ogg），
-     代码里做中文曲名映射并从根目录兜底查找，装机即可见、可播。
-  3) 启动图还没关、手指就能点动：门禁改由「主页首帧真正上屏」驱动，
-     页面没就绪前一律吞掉触摸；残局库后台读不再拦屏幕。
-  4) 启动耗时.txt 找不到：改写到「内部存储/中国象棋/」这个看得见的目录。
-  5) 帮助 / 说明页文案同步。
-
-v2.19 改动（主人实测反馈）：
-  1) 《梁祝》《来日方长》两首直接打进安装包（曲/ 目录随 APK 一起装，已转成 ogg，
-     合共 4.4MB），装上就能选，不用连电脑、不用找 Android/data。
-     另开一条搜索路径「内部存储/中国象棋/曲」：手机文件管理器、数据线都能直接看到，
-     拖进去就行；首次启动会弹一次存储权限，不给也只影响这一项。
-  2) 文件曲改流式播放：以前把整首 mp3 解成 PCM 塞进内存（一首 20~40MB），
-     手机上翻说明页会一顿一顿；现在 mixer.music 边读边解码，常驻几 MB。
-  3) 残局库导出不再扔进看不见的私有目录，改到外部可见位置，
-     并在界面写出完整路径；卸载前的备份路径也写进说明页了。
-  4) 安装包改用固定签名（仓库内 keystore 参与 CI 签名），
-     以后新版本可以直接覆盖安装，不必卸载旧版，残局库与已通关记录不会再丢。
-  5) 说明页同步改写：取消「移到别的目录再装新版」这类走不通的说法。
-
-v2.18 改动（主人实测反馈）：
-  1) 手机取消「中国象棋」四字印章入场动画：手机上被 SDL 闪屏盖住根本看不见，
-     却白等 0.95~1.5 秒。现在闪屏古典图之后直接进主页，这段等待整个没有了。
-  2) 音效波形不再在启动路上合成：改成第一次真正要响才按个生成，
-     冷启动少做 7 段波形（约 160ms 起，手机上更久）。
-  3) 启动输入门禁重排：动画取消后补 0.65 秒硬吞窗口保住连敲防护，
-     总门禁由 2.2 秒收到 1.8 秒；退出 / 返回键始终放行。
-  4) 设置面板按屏高整体放大：按钮高度手机 50、桌面 34，标签 24px / 19px、
-     按钮字 22px / 17px，按钮按面板宽度均分，手指好点；命中区与画面共用同一套
-     布局数据，不会出现「画得大、点得小」。
-  5) 手机上不好用的「导入曲子 / 删曲 / 换启动图 / 复原」四个入口全部取消；
-     内置古曲直接给足 5 首，新增《梁祝》，开机就能选，不用连电脑拷文件。
-
-v2.5 手机专版改动：
-  1) 界面按屏幕自动分两套：启动探针量一次真实分辨率，短边 ≥720 物理像素就走
-     「手机放大版」——顶栏按钮 32 高、底栏 36 高、主页按钮加高加大，字号提一档；
-     桌面窗口仍是原来的尺寸。判断结果也可以通过 XQ_BIG_UI=0/1 强制指定。
-  2) 底栏重排：音乐开关挪到顶栏、紧挨音效；底栏九格改为
-     悔棋 / 复盘 / 提示 / 存局 / 认输 / 提和 / 棋谱 / 重开 / 返回。
-     「返回」等同 Esc，摆棋与残局库本来就有自己的返回口，不再重复放。
-  3) 主页新增「退出」：手机上直接结束 Activity 回桌面，不必再用上滑手势；
-     桌面版点它等同关窗口。
-  4) 「提示」改为后台线程算：深度由 3 层提到最多 8 层、时间 2 秒，
-     算的时候界面照常 60 帧，不再假死；残局里给出的着法明显更靠谱。
-  5) 上滑切后台再回来偶发黑屏：加了 Surface 尺寸复核（每半秒一次 + 前台事件触发重建），
-     并关掉 SDL 的「失焦最小化」；同时把主线程里所有长任务都移出，避免 ANR 黑屏。
-  6) 残局库新增 100 局（经典 70 + 江湖 30），全部经过规则校验与「两步杀」强制验证；
-     升级安装时按名字自动并入老库，不用清数据。
-
-v2.4 改动：
-  1) 对局中按 Esc 不再悄悄存「半局」，直接回主页，并提示「这局没存，想保下来
-     请在局中点存局」。整个「暂存半局」功能撤掉，旧设置里攒下的暂存条目一并清空。
-  2) 导入浮层只留「粘贴文本 / 选文件导入」两块，面板固定高度居中；
-     以前那半块看不见的暂存列表不再占地方。
-  3) 说明浮层每页记住行数，页面没写满且后面还有页时，底部加一行绿字提示
-     「↓ 后面还有 N 页」，不会再误以为已经看完了。
-  4) 翻页按钮跟着状态变：还能翻的是绿底白字，到头的是灰底灰字。
-
-v2.2 改动：
-  1) 主页背景换成象棋：原来是《重屏会棋图》（画的其实是围棋），现在改为程序自绘的
-     斜放象棋盘 + 几枚红子 + 「楚河·汉界」，墨线按主题取色，深浅两套皮肤都合身；
-     想换成自己的画，把图片命名成 主页背景.jpg 放程序目录即可（会盖掉自绘版）。
-  2) 说明浮层鼠标可操作：滚轮上下翻页，点「« 上一页 / 下一页 »」，点正文左半往回、
-     右半往前，鼠标停在按钮上会亮起来；键盘 ← → / PgUp / PgDn 照旧。
-  3) 电脑战力提升（同一时间预算下明显更硬）：
-     · 子力价值改为象棋惯例（士象由 20 提到 200，不再为救一个兵送士象），
-       位置分改用整张位置分表：兵过河、马炮居中、车占要道、士象守家各有分值；
-     · 着法排序加入「置换表着法 → 吃子按 MVV-LVA → 杀手着法 → 历史启发」，
-       同样深度下节点数少了一个数量级（实测 4 层：11.9 秒 → 2.0 秒）；
-     · 将军延伸：临近叶子被将军多看一层，不再「将完才发现自己亏子」；
-     · 杀棋分值随层数衰减，优先走快杀、被将死时尽量拖；
-     · 置换表在同一步内不再清空、跨层复用；「困难 / 大师」的时间预算真正用满
-       （大师最多 8 层，实际层数由 5.5 秒决定）。
-  4) 残局库补齐：11-01 备份里少的 7 条（第094局 负笈追师 + 6 条自定残局）已并回，共 115 条。
-
-v2.1 改动（安卓版 v2.1，桌面端行为不变）：
-  1) 新增安卓（python-for-android / buildozer）适配层，桌面 exe 仍按原样运行：
-     可写目录改用应用私有目录（ANDROID_PRIVATE），只读资源仍从 __file__ 旁边取。
-  2) 显示改为「等比缩放 + 居中留边」：以前按窗口宽高直接拉伸，手机竖屏（1080×1920）
-     与逻辑画布（572×838）比例不同会被压扁；现在按短边等比缩放、四周留黑边，坐标反算同步改。
-  3) 中文字体自动找安卓系统字体（Noto Sans CJK / DroidSansFallback 等），不再只认
-     Windows 字体目录；找不到再退回 SysFont。
-  4) 安卓物理返回键等同窗口关闭：浮层先关、对局先回主页、主页才退出。
-  5) 触屏：显式打开 SDL 的触摸转鼠标模拟，手指点选即可走子。
-
-v2.0 改动（修一个真 bug）：
-  1) 长将判定改为「按整个重复循环看谁在将军」：以前只看「这一着是否将军」，于是对手连将、
-     你被迫来回走帅时，若你的某一步恰好也形成将军（抽将），长将会记到你头上；反过来
-     对手一直将军却因为不构成「你这一着将军」而判不出来。现在记录每着的局面与将军状态
-     （pos_log），同一局面第 3 次出现时，回看这一轮循环：谁每着都在将军谁判负，
-     被迫躲闪的一方不受罚。
-  2) 三次重复但双方都不在将军（确实无别的着法可走）→ 判和，不再让双方在原地反复打转；
-     原来只在走子前拦一下，被迫重复时既不判和也不判负，会一直循环。
-  3) 说明文字同步更新。
-
-v1.9 改动：
-  1) 单步计时圆表放大：半径按面板内框算（黑方 22、红方 26），比边框小一圈，
-     纵向在面板里居中；横向仍与将帅那条竖线对齐，所以表就压在帅/将的正上、正下方。
-  2) 剩 10 秒内不再只是变红，改为**红黑交替闪烁**（约 0.8 秒一闪），
-     秒数、表圈、剩余弧一起闪，远看也看得见「要超时了」。
-
-v1.8 改动：
-  1) 「该谁走」不再用面板上的箭头带，改为**单步计时圆表**：圆表挂在轮走一方的将/帅旁边
-     （与将帅同一竖线、贴在棋盘下沿 / 上沿），12 个刻度像座钟，指针一圈走完这一手的限时，
-     圈心写这一手还剩几秒；不走的一方不画表。圆表旁一句话写「该你走」/「思考中…」。
-  2) 新增「单步限时」：设置面板可选 不限 / 15 / 30 / 60 秒，对战顶部设置栏另有一个
-     「单步」按钮，对局中直接点即可在四档之间轮换，不必回主页；超时判负（不限时则纯计时）。
-  3) 说明浮层改为**多页显示**：上一页 / 下一页按钮 + 页码，← → 键翻页，面板居中；
-     文字量再涨也不会挤成一团或被底边裁掉。
-  4) 主页落款「制作人」向左提一格（26px），不再贴着右侧边框。
-
-v1.7 改动：
-  1) 长将判负真正生效：同一局面第 3 次出现，且这几着一直在将军 —— 直接判长将方负；
-     以前「将军」这一类重复会被「不得重复走子」挡回去，长将永远判不出来，现在放行并判负；
-     电脑自己则会避开这类着法，不主动长将；
-  2) 设置面板里，曲 目录里的真实音频与内置合成曲在样式上分开了：
-     有文件的按钮描绿边、右上角实心点，合成的画灰色空心点，旁边一行图例说明。
-
-v1.6 改动：
-  1) 背景曲库改为「自动扫描 曲 目录」：往里放 mp3 / ogg / wav，设置面板立刻多一个曲目，
-     放进去即生效、删掉即消失，不必再改代码；内置四首合成古曲仍在，作为没有文件时的兜底；
-  2) 曲目按钮改为每行 5 个、最多 10 个，面板底部提示当前 曲 目录里有几首、哪些是内置合成；
-  3) 曲名过长自动截断，不再顶出按钮。
-
-v1.5 改动：
-  1) 程序更名为「中国象棋-智算单机版-版本号」；exe 名称自动跟随主程序名；
-  2) 缺少 pygame 时不再直接抛一堆红字：弹出中文提示，告诉你去装包或用 exe；
-     同时在文件首行关掉编辑器（Pylance / Pyright）的「无法解析导入 pygame」告警；
-  3) 残局库的操作提示（已改名 / 已收藏 / 已删除…）只在当前库视图里显示，
-     切分类、改搜索词、翻页、关掉浮层都会自动清掉，不再带到别的菜单；
-  4) 对战新增「轮走指示」：上下两块面板各有一条计时箭头带，轮到哪方哪条就亮，
-     箭头左右巡游，面板里同步写「该你走」/「思考中…」；
-  5) 深色「墨玉」主题下，残局库 / 设置 / 说明 / 导入 / 命名浮层一并换成深色配色；
-  6) AI 思考改到后台线程：算棋时窗口不再卡死，箭头与计时照常动；
-  7) 音效与背景曲支持外置替换：往 音效 / 曲 目录放同名 wav / ogg / mp3 即生效；
-  8) 打包带程序图标；说明文字与对局提示换行时不再把标点挤到行首。
-
-v1.4 改动：
-  1) 残局库条目可重命名：每行行尾新增「改」按钮，改名时可同时改「先行方」；
-  2) 库行新增两列：出处（适情雅趣 / 经典排局 …）与存盘日期，子数/通关/黑先状态另列显示；
-  3) 「已通关」按实际胜方判定并记录：条目自带先行方（红先 / 黑先），
-     载入黑先排局时人类执黑、电脑执红，赢棋照样记通关，行内绿灯不变；
-  4) 暂存半局只在走过 2 手以上才记，空局面与一手就退的不再堆进暂存列表（旧垃圾会清掉）。
-
-v1.3 改动：
-  1) 重复走子改温和版：同一局面第 3 次出现才拦（前两次照常走），提示里写明次数；
-  2) 导入支持整份棋谱：粘贴本程序导出的棋谱全文，自动解析起始局面并逐手回放，
-     可直接续下、可复盘全谱；普通式与叠子式记谱（炮八平五 / 前炮进1）都能认；
-  3) 导入浮层新增「选文件」：从 棋谱 目录或任意位置选 .txt / .json / .fen；
-     输入框容量 200 → 4000 字符，长棋谱不再被截断；
-  4) 导入浮层最多列 4 条暂存（其余提示「另有 N 条」），面板高度随内容收放；
-  5) AI 搜索时定期处理窗口消息，大师难度思考数秒也不会被系统判成「未响应」。
-
-v1.2 改动：
-  1) 三次重复局面不再判和：重复走子会被拦下并提示换着法，电脑也避开重复路线；
-  2) 残局库一屏 20 行、尾部同样 20 行，↑↓ 一行一行滚动，PgUp/PgDn 整屏；
-  3) 残局库每行有行号，行尾 ★ 收藏（更醒目），已通关显示绿色「已通关」；
-  4) 对战 / 残局底部新增「存局」，把当前局面存进残局库（分类：自定残局）；
-  5) 存盘一律写入分类，解决「全部里有、分项里找不到」的问题；
-  6) 对局中可随手开关背景音乐（底部「音乐」按钮或 M 键），换曲不再强制打开音乐；
-  7) 暂存半局列表加了行号，快捷键补 L（残局库）/ M（音乐）。
-
-v1.1 改动：
-  1) 窗口自适应：按屏幕可用高度等比缩放（1376×768 之类的小屏也能完整显示）；
-  2) 走子提示：选中棋子后把可落点画成绿点、可吃子画成红圈；
-  3) 将军 / 胜负提示：被将军的将帅描红并闪“将军”，终局在棋盘中央弹结果牌；
-  4) 规则补全：长将判负（连续将军 6 步）、三次重复局面判和、60 回合无吃子判和；
-  5) 认输 / 提和按钮（提和由电脑按形势决定）、悔棋次数限制（设置里可选）；
-  6) AI 增强：置换表 + 静态搜索（吃子延伸）+ 迭代加深，同等时间算得更深；
-  7) 残局库：搜索框、收藏筛选、通关标记、导出 / 导入整库、写库自动留 .bak；
-  8) 对局“提示”按钮：电脑给出推荐一手并标在棋盘上；
-  9) 设置新增：音效音量、音乐音量滑块，悔棋限制，棋盘配色（原木 / 墨玉）；
- 10) 打包支持：资源与数据路径兼容 PyInstaller 单文件 exe。
+版本更新记录见同目录《更新记录.md》。
 
 快捷键：
   R      重开当前局面
@@ -193,6 +16,7 @@ v1.1 改动：
   P      复盘（方向键 / 空格步进与自动播放，ESC 退出）
   ESC    对战中返回主页（不自动暂存，保局请在局中点「存局」）；主页关闭浮层或退出程序
 """
+
 
 import base64
 import json
@@ -561,7 +385,7 @@ def load_font(size):
 
 
 # ---------------------------- 版本 / 创作者 / 设置项 ----------------------------
-VERSION = "2.22"
+VERSION = "2.24"
 APP_NAME = "中国象棋-智算单机版"
 CREATOR = "songyq"     # 主页右下角标注；
 TIME_OPTIONS = [5, 10, 20, 30, 60]    # 对战时间（分钟）
@@ -1344,6 +1168,61 @@ def _mop_up(strong_king, weak_king):
     return 12 * _edge_bonus(*weak_king) - 8 * dist
 
 
+def _synergy_of(rooks, cannons, horses):
+    """车炮同线（炮架现成）加成最大；马靠近车也有照应。
+    模块级函数，避免每个叶子节点都新建一次闭包。"""
+    val = 0
+    for rr_, rc_ in rooks:
+        for cr, cc in cannons:
+            if rr_ == cr:
+                val += 10
+            if rc_ == cc:
+                val += 18
+        for hr, hc in horses:
+            if max(abs(rr_ - hr), abs(rc_ - hc)) <= 2:
+                val += 6
+    return val
+
+
+def _shield_of(king, guards, pawns, side):
+    """将帅安危：身边有士象护着、前面有兵挡着，才算稳。"""
+    if king is None:
+        return 0
+    kr, kc = king
+    val = 0
+    for gr, gc in guards:
+        d = max(abs(gr - kr), abs(gc - kc))
+        if d <= 2:
+            val += 14 - 4 * d
+    for pr, pc_ in pawns:
+        ahead = (kr - pr) if side == RED else (pr - kr)
+        if abs(pc_ - kc) <= 1 and 1 <= ahead <= 3:
+            val += 8
+    return val
+
+
+def _pawn_advance(r_pawns, b_pawns):
+    """过河兵纵深：越靠近对方九宫越值钱；对面同路没卒顶着再加一笔。"""
+    adv = 0
+    for r_, c_ in r_pawns:
+        if r_ <= 4:
+            adv += (5 - r_) * 5
+            if not any(pc_ == c_ and pr < r_ for pr, pc_ in b_pawns):
+                adv += 12
+    for r_, c_ in b_pawns:
+        if r_ >= 5:
+            adv -= (r_ - 4) * 5
+            if not any(pc_ == c_ and pr > r_ for pr, pc_ in r_pawns):
+                adv -= 12
+    return adv
+
+
+# v2.23：评估用的临时位置表复用同一批列表。evaluate 是搜索最热的叶子函数，
+# 每次新建 10 个空表在手机上要花不少时间；这里只清空、不重新分配。
+# 搜索引擎由 _AI_LOCK 串行调用，不存在重入问题。
+_EVAL_LISTS = [[], [], [], [], [], [], [], [], [], []]
+
+
 def evaluate(board):
     """局面分（正数红方好）。
 
@@ -1361,6 +1240,11 @@ def evaluate(board):
     mat_r = mat_b = 0                # 不含将帅的子力分（判残局收尾用）
     hv_r = hv_b = 0                  # 各方车马炮数量
     rk = bk = None                   # 双方将帅位置
+    # v2.23：评估细化用的位置表（复用模块级列表，只清空不新建）
+    (r_rooks, b_rooks, r_cannons, b_cannons, r_horses, b_horses,
+     r_guards, b_guards, r_pawns, b_pawns) = _EVAL_LISTS
+    for _lst in _EVAL_LISTS:
+        _lst.clear()
     for (r, c), (pc, pt) in board.items():
         if pt == KING:
             if pc == RED:
@@ -1372,15 +1256,31 @@ def evaluate(board):
             continue
         base = PIECE_VALUES.get(pt, 0)
         v = base + _pos_bonus(pc, pt, r, c)
+        # v2.23：位置表的收集并入原来的分类分支，别为它再遍历一遍棋子。
         if pc == RED:
             score += v
             mat_r += base
             if pt == PAWN:
                 rp += 1
+                r_pawns.append((r, c))
             elif pt == ADVISOR:
                 ra += 1
+                r_guards.append((r, c))
             elif pt == ELEPHANT:
                 re += 1
+                r_guards.append((r, c))
+            elif pt == ROOK:
+                r_rooks.append((r, c))
+                heavy += 1
+                hv_r += 1
+            elif pt == CANNON:
+                r_cannons.append((r, c))
+                heavy += 1
+                hv_r += 1
+            elif pt == HORSE:
+                r_horses.append((r, c))
+                heavy += 1
+                hv_r += 1
             else:
                 heavy += 1
                 hv_r += 1
@@ -1389,10 +1289,25 @@ def evaluate(board):
             mat_b += base
             if pt == PAWN:
                 bp += 1
+                b_pawns.append((r, c))
             elif pt == ADVISOR:
                 ba += 1
+                b_guards.append((r, c))
             elif pt == ELEPHANT:
                 be += 1
+                b_guards.append((r, c))
+            elif pt == ROOK:
+                b_rooks.append((r, c))
+                heavy += 1
+                hv_b += 1
+            elif pt == CANNON:
+                b_cannons.append((r, c))
+                heavy += 1
+                hv_b += 1
+            elif pt == HORSE:
+                b_horses.append((r, c))
+                heavy += 1
+                hv_b += 1
             else:
                 heavy += 1
                 hv_b += 1
@@ -1403,6 +1318,13 @@ def evaluate(board):
         lack_r = (2 - ra) * 26 + (2 - re) * 26
         lack_b = (2 - ba) * 26 + (2 - be) * 26
         score += int((lack_b - lack_r) * (0.5 + 0.8 * phase))
+
+    # v2.23 评估细化（三个辅助函数在模块级，叶子节点不新建闭包）
+    score += _synergy_of(r_rooks, r_cannons, r_horses)
+    score -= _synergy_of(b_rooks, b_cannons, b_horses)
+    score += _shield_of(rk, r_guards, r_pawns, RED)
+    score -= _shield_of(bk, b_guards, b_pawns, BLACK)
+    score += int(_pawn_advance(r_pawns, b_pawns) * (0.5 + 0.5 * phase))
 
     # 残局收尾：一方多出一个车以上、对方又没有车马炮，才启用逼将 / 靠帅
     if phase > 0.30:
@@ -1450,6 +1372,8 @@ QUIESCE_PLIES = 3   # 静态搜索最多再延伸几层吃子
 EXT_BUDGET = 3      # 每一轮迭代加深允许的「将军延伸」总层数
 _HISTORY = {}       # 安静着法历史启发：着法 -> 抢到 beta 的次数权重
 _KILLERS = {}       # ply -> [第一杀手着法, 第二杀手着法]
+_COUNTER = {}       # v2.23：对方上一手 -> 最好的应手（反制着法启发）
+_PLY_MOVE = [None] * 80   # v2.23：各层正在走的着法，给下一层做反制提示
 _ext_left = EXT_BUDGET
 NULL_MOVE_R = 2     # 空着裁剪：假装自己不走，让对方白走一步，直接砍掉几层
 _null_lock = False  # 空着裁剪不能连着用，否则连续空着会把局面算歪
@@ -1646,6 +1570,7 @@ def minimax(board, depth, alpha, beta, maximizing, ply=0, hkey=None):
             return val, None
 
     killers = _KILLERS.get(ply) or ()
+    prev_move = _PLY_MOVE[ply] if 0 <= ply < len(_PLY_MOVE) else None
 
     def order_key(mv):
         """排序：置换表着法 → 吃子（先吃大子、少用大子换）→ 杀手着法 → 历史分。
@@ -1659,6 +1584,9 @@ def minimax(board, depth, alpha, beta, maximizing, ply=0, hkey=None):
                      - PIECE_VALUES.get(mover, 0) // 8)
         if mv in killers:
             return -10 ** 5 + (0 if mv == killers[0] else 1)
+        # v2.23：对方刚走的那一手，通常只有两三种像样的应法，优先试。
+        if prev_move is not None and _COUNTER.get(prev_move) == mv:
+            return -10 ** 4
         return -_HISTORY.get(mv, 0)
 
     moves.sort(key=order_key)
@@ -1699,6 +1627,7 @@ def minimax(board, depth, alpha, beta, maximizing, ply=0, hkey=None):
                 first = False
             elif first or not opt["pvs"]:
                 _REP_STACK[child_key] = rep_prev + 1
+                _PLY_MOVE[ply + 1] = (fr, fc, tr, tc)
                 try:
                     child, _ = minimax(board, child_depth, alpha, beta,
                                        not maximizing, ply + 1, child_key)
@@ -1707,6 +1636,7 @@ def minimax(board, depth, alpha, beta, maximizing, ply=0, hkey=None):
                 first = False
             else:
                 _REP_STACK[child_key] = rep_prev + 1
+                _PLY_MOVE[ply + 1] = (fr, fc, tr, tc)
                 try:
                     reduce = 0
                     # 根层不削减：根层着法就是最终要交出去的那一步，削浅了容易漏好棋
@@ -1745,12 +1675,17 @@ def minimax(board, depth, alpha, beta, maximizing, ply=0, hkey=None):
             if victim is None:          # 安静着法剪出的好棋：记进杀手 / 历史表
                 mv = (fr, fc, tr, tc)
                 _HISTORY[mv] = _HISTORY.get(mv, 0) + depth * depth
+                if prev_move is not None:
+                    _COUNTER[prev_move] = mv
                 ks = _KILLERS.setdefault(ply, [None, None])
                 if ks[0] != mv:
                     ks[1] = ks[0]
                     ks[0] = mv
             break
 
+    # v2.23：最佳安静着法也加历史分（不必等beta截断），下一层排得更准。
+    if best_move is not None and depth > 0 and board.get((best_move[2], best_move[3])) is None             and board.get((best_move[0], best_move[1])) is not None             and board[(best_move[0], best_move[1])][1] not in (KING,):
+        _HISTORY[best_move] = _HISTORY.get(best_move, 0) + depth
     if value <= alpha0:
         flag = 2
     elif value >= beta0:
@@ -1851,8 +1786,9 @@ def _reset_search_tables():
     """每步开局前整理搜索表：置换表别无限涨，历史分衰减，杀手表清空"""
     if len(_TT) > _TT_LIMIT:
         _TT.clear()
-    if len(_HISTORY) > 30000:
+    if len(_HISTORY) > 30000 or len(_COUNTER) > 30000:
         _HISTORY.clear()
+        _COUNTER.clear()
     else:
         # 历史分半衰：上一步的例子仅供参考，新近抢到 beta 的着法更有说服力
         for mv in _HISTORY:
@@ -1942,12 +1878,26 @@ def ai_best_move(board, color, level=2, budget=None, banned=None):
 
     if budget is None:
         budget = DIFFICULTY_BUDGET.get(level, 1.0)
+        # v2.23：按局面复杂度收放时间。子少的简单残局不必耗满预算，
+        # 开局 / 满子中局允许多用一点，把省下的时间留给真正复杂的局面。
+        if level >= 3:
+            n = len(board)
+            if n <= 10:
+                budget *= 0.35
+            elif n <= 16:
+                budget *= 0.60
+            elif n >= 28:
+                budget *= 1.15
+            budget = max(0.20, min(budget, 8.0))
+    if len(candidates) == 1:
+        return candidates[0]          # 只有一步可走，不必搜
 
     best = None
     _reset_search_tables()
     _REP_STACK[board_hash(board, color)] = 1      # 根局面进栈，往下才有「重复」可比
     _node_count = 0
     _ROOT_BANNED = banned
+    _PLY_MOVE[0] = None               # 根层没有「对方上一手」
     _deadline = time.perf_counter() + budget
     prev_val = None
     try:
@@ -5173,8 +5123,10 @@ def refresh_overlays():
     HELP_NEXT = pygame.Rect(HELP_PANEL.right - _bw - 24, HELP_PANEL.bottom - _bh - 14, _bw, _bh)
     HELP_TEXT_TOP = HELP_PANEL.y + (92 if UI_BIG else 78)
     HELP_TEXT_BOTTOM = HELP_PANEL.bottom - (_bh + 38)
-    HELP_FONT_SIZE = 16 if UI_BIG else 15
-    HELP_LH = 26 if UI_BIG else 23
+    # v2.23：主人反馈还是偏小。想自己再调，就改下面两个数字：
+    # HELP_FONT_SIZE 是字号，HELP_LH 是行距（行距一般取字号 + 9~11）。
+    HELP_FONT_SIZE = 19 if UI_BIG else 16
+    HELP_LH = 29 if UI_BIG else 25
 
     # 残局库：长屏一屏多放几行，面板上下居中，底下的「上一页 / 下一页」跟着下去
     def _lib_h(n):
@@ -6106,451 +6058,117 @@ def load_home_bg():
     return surf
 
 
-_SEAL_PNG_B64 = {
-    "中": (
-        "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"
-        "QmCC"
-    ),
-    "国": (
-        "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"
-        "OjAwn2au5AAAAABJRU5ErkJggg=="
-    ),
-    "象": (
-        "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"
-        "MjQ6MTgrMDA6MDDwfvIRAAAAAElFTkSuQmCC"
-    ),
-    "棋": (
-        "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"
-    ),
-}
+# 成品印章图：四枚篆字已预先合成到一张 68×68 PNG 并内嵌。
+# 不再逐字保存 PNG / 运行时拼字，源码瘦一大截，加载也更快。
+_SEAL_IMG_B64 = (
+    "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"
+    "TkSuQmCC"
+)
 
 
-def _seal_image(name):
-    """印章字形原图：优先用同目录的 印章_x.png；缺失就用内置的那份。
-    安卓 APK 里只带 .py、没有这几张图，全靠内置数据兜底。"""
-    path = os.path.join(_ASSET_DIR, "印章_%s.png" % name)
+def _seal_surface():
+    """成品印章（红底白字 68×68）：优先同目录 印章.png，
+    否则用内嵌图；解码一次后缓存复用。
+
+    想换印章样式：把一张 68×68 的 PNG 命名为 印章.png 放程序目录即可。
+    """
+    if "seal_img" in _HOME_CACHE:
+        return _HOME_CACHE["seal_img"]
+    surf = None
+    path = os.path.join(_ASSET_DIR, "印章.png")
     if os.path.exists(path):
         try:
-            return pygame.image.load(path)
-        except (pygame.error, OSError):
-            pass
-    data = _SEAL_PNG_B64.get(name)
-    if data:
-        try:
-            import base64 as _b64
-            import io as _io
-            raw = _b64.b64decode("".join(data))
-            return pygame.image.load(_io.BytesIO(raw))
+            surf = pygame.image.load(path).convert_alpha()
+            surf = pygame.transform.smoothscale(surf, (68, 68))
         except (pygame.error, OSError, ValueError):
-            pass
-    return None
-
-
-def load_seal_glyphs():
-    """小篆印章字形（透明底黑字 PNG → 白字），顺序：中/国/象/棋"""
-    if "seal" in _HOME_CACHE:
-        return _HOME_CACHE["seal"]
-    glyphs = []
-    for name in ("中", "国", "象", "棋"):
-        g = None
-        raw = _seal_image(name)
-        if raw is not None:
-            try:
-                s = pygame.transform.smoothscale(raw.convert_alpha(), (28, 28))
-                # 黑字转白字：RGB 拉满、透明度保持不变
-                s.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_MAX)
-                g = s
-            except (pygame.error, OSError):
-                g = None
-        glyphs.append(g)
-    _HOME_CACHE["seal"] = glyphs
-    return glyphs
+            surf = None
+    if surf is None:
+        try:
+            import io as _io
+            raw = base64.b64decode("".join(_SEAL_IMG_B64))
+            surf = pygame.image.load(_io.BytesIO(raw)).convert_alpha()
+        except (pygame.error, OSError, ValueError):
+            surf = None
+    _HOME_CACHE["seal_img"] = surf
+    return surf
 
 
 def draw_seal(screen):
-    """右上角小篆印章：红底白字，右列「中/国」、左列「象/棋」"""
-    seal = pygame.Rect(SCREEN_W - 92, 24, 68, 68)
-    draw_rect(screen, (176, 52, 48), seal, 0, 4)
-    draw_rect(screen, (252, 240, 212), seal.inflate(-8, -8), 1, 2)
-    glyphs = load_seal_glyphs()
-    fallback_font = None
-    for path in (r"C:\Windows\Fonts\simkai.ttf", r"C:\Windows\Fonts\simsun.ttc"):
-        if os.path.exists(path):
-            try:
-                fallback_font = pygame.font.Font(path, 26)
-                break
-            except (OSError, pygame.error):
-                pass
-    # (字, 列, 行)：右上=中，右下=国，左上=象，左下=棋（传统印章序）
-    cells = [("中", 1, 0), ("国", 1, 1), ("象", 0, 0), ("棋", 0, 1)]
-    for ch, col, row in cells:
-        gx = seal.x + 4 + col * 32
-        gy = seal.y + 4 + row * 32
-        g = glyphs[("中国象棋".index(ch))]
-        if g:
-            screen.blit(g, (gx, gy))
-        elif fallback_font:
-            st = fallback_font.render(ch, True, (255, 245, 235))
-            screen.blit(st, (gx + 14 - st.get_width() // 2,
-                             gy + 14 - st.get_height() // 2))
+    """右上角成品印章：直接贴一张合成好的图，不再现场拼四枚篆字。"""
+    img = _seal_surface()
+    if img is not None:
+        screen.blit(img, (SCREEN_W - 92, 24))
 
 
 def home_button_rects():
@@ -6772,8 +6390,8 @@ HELP_PREV = pygame.Rect(HELP_PANEL.x + 24, HELP_PANEL.bottom - 40, 96, 30)
 HELP_NEXT = pygame.Rect(HELP_PANEL.right - 120, HELP_PANEL.bottom - 40, 96, 30)
 HELP_TEXT_TOP = HELP_PANEL.y + 76
 HELP_TEXT_BOTTOM = HELP_PANEL.bottom - 56
-HELP_FONT_SIZE = 15
-HELP_LH = 23
+HELP_FONT_SIZE = 16
+HELP_LH = 25
 
 HELP_PARAS = [
     "欢迎使用《中国象棋·智算单机版 v%s》。这份说明按实际使用顺序写："
@@ -6843,7 +6461,9 @@ def help_paras():
                  "另外四首是现场合成，设置里点曲名就换。"
                  "自己加曲子：把 mp3 / ogg / wav 放进「内部存储/中国象棋」，"
                  "或者它下面的「曲」文件夹（没有就新建，文件管理器或数据线都能进），"
-                 "文件名就是曲名，重进设置就能看到。首次启动会问一次存储权限，"
+                 "文件名就是曲名，退出设置再进一次就能看到（删除也一样，要重进才刷新）。"
+                 "内置那两首真曲子打在安装包里，不在「中国象棋」文件夹，删不掉也看得见；"
+                 "另外四首是现场合成、没有文件。第一次进设置会问一次存储权限，"
                  "允许才能读那个目录；不给也只影响自己加的曲子。")
         elif p.startswith("【导入】"):
             p = p.replace("或点「选文件」挑 棋谱 目录里的 .txt；", "")
@@ -6853,9 +6473,7 @@ def help_paras():
                  "先到残局库点「导出库」，文件会存进系统「下载」目录（文件管理器能看到，"
                  "卸载不会清掉），装完新版点「导入库」找回。")
         elif p.startswith("【开机画面】"):
-            p = ("【开机画面】开机最早那一闪「楚汉象棋·一局定天下」是打进安装包的古典图，装好后换不了；"
-                 "它后面不再有入场动画，直接就是主页，启动比以前快。手机上换图、换曲子都取消了，"
-                 "不用再折腾文件目录。")
+            p = ("【开机画面】是打进安装包的古典图，装好后换不了，原来的可更换已取消；")
         # 手机版把「电脑」都改口成「手机」：同一个手机里没有电脑这回事，
         # 只有「数据线连电脑」那句说的是真的电脑，先护住再换。
         p = p.replace("数据线连电脑", "\x00PC\x00")
@@ -7308,183 +6926,6 @@ def remove_boot_img():
         return False, "删不掉：%s" % exc
     _invalidate_boot_img()
     return True, "已恢复出厂古典启动图，下次启动生效。"
-
-
-def intro_seal_glyphs():
-    """四枚小篆字（透明底 → 白字），给入场动画用，比主页那枚印章大得多。"""
-    out = []
-    for ch in "中国象棋":
-        g = None
-        raw = _seal_image(ch)
-        if raw is not None:
-            try:
-                g = pygame.transform.smoothscale(raw.convert_alpha(), (76, 76))
-                g.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_MAX)
-            except (pygame.error, OSError, ValueError):
-                g = None
-        if g is None:
-            try:
-                g = load_font_song(64).render(ch, True, (252, 240, 212))
-            except Exception:
-                g = None
-        out.append(g)
-    return out
-
-
-def play_intro(screen, present, sounds, gate, busy=None, min_seconds=0.95,
-               max_seconds=1.5):
-    """「中国象棋」四字印章落位动画：把冷启动的等待变成看得见的过场。
-
-    - 四个字依次自上落下、缩放回弹，最后合成一枚朱红印章并淡出到主页；
-    - 每帧顺手做一件准备活（字体 / 主页背景 / 一段音效波形），主页首帧不再
-      一口气卡住 160ms 以上；
-    - 这段时间的输入一律吞掉，并按「按下 / 抬起」计数交给后面那段门禁，
-      连敲、按住不放、按下被吞抬手落窗外的跨界配对都算得清清楚楚；
-    - v2.17b：busy 只作兼容保留，动画时长不再等后台残局库。库改由主循环
-      门禁兜着，两者解耦后动画最坏情况从 2.4s 收到 1.5s，不会越等越慢。
-    """
-    t0 = time.perf_counter()
-    glyphs = None
-    font_small = None
-    steps = []
-    # 0 自定义启动图，1 字体，2 主页背景，3~9 七段音效，10 收尾。
-    # 读图/缩放也占一帧，别让第一帧一口气干完；读不到就走米色棋盘底。
-    steps.append(lambda: load_boot_img())
-    steps.append(lambda: (load_font_song(54), load_font_song(17), load_font(28),
-                          load_font(20), load_font_song(20)))
-    steps.append(lambda: (make_home_bg(), load_seal_glyphs()))
-    for i in range(len(_SOUND_BUILDERS)):
-        steps.append(lambda i=i: make_one_sound(sounds, i))
-    steps.append(lambda: finish_sounds(sounds))
-    step = 0
-    frame = 0
-    veil = pygame.Surface((SCREEN_W, SCREEN_H))
-    veil.fill(TH["bg"])
-    # 自定义启动图上压一层米色薄罩：印章、进度条、小字才不会被照片淹没
-    tint = pygame.Surface((SCREEN_W, SCREEN_H))
-    tint.set_alpha(96)
-    tint.fill((241, 219, 182))
-    cx, cy = SCREEN_W // 2, int(SCREEN_H * 0.44)
-    box = pygame.Rect(cx - 100, cy - 100, 200, 200)
-    cells = [(box.x + 12 + (i % 2) * 92, box.y + 12 + (i // 2) * 92)
-             for i in range(4)]
-
-    while True:
-        now = time.perf_counter()
-        t = now - t0
-        for ev in pygame.event.get():
-            if ev.type in INPUT_DOWN_TYPES:
-                gate["down"] += 1
-                gate["last"] = now
-            elif ev.type in INPUT_UP_TYPES:
-                gate["down"] = max(0, gate["down"] - 1)
-                gate["last"] = now
-            elif ev.type in INPUT_MOVE_TYPES:
-                gate["last"] = now
-            else:
-                # 退出 / 切后台 / 窗口事件不能吞，放回队列交给主循环
-                try:
-                    pygame.event.post(ev)
-                except pygame.error:
-                    pass
-        if frame == 0:
-            # 第一帧只画几何，字体这一帧才热，避免首帧等字体
-            pass
-        elif step < len(steps):
-            try:
-                steps[step]()
-            except Exception:
-                pass
-            step += 1
-        if glyphs is None and frame >= 1:
-            try:
-                glyphs = intro_seal_glyphs()
-            except Exception:
-                glyphs = [None] * 4
-        if font_small is None and frame >= 1:
-            try:
-                font_small = load_font_song(20)
-            except Exception:
-                font_small = None
-
-        # ---- 画面 ----
-        screen.fill(TH["bg"])
-        boot_img = _BOOT_IMG_CACHE.get("v")
-        if boot_img is not None:
-            screen.blit(boot_img, (0, 0))
-            screen.blit(tint, (0, 0))
-        draw_rect(screen, C((120, 86, 52)),
-                  pygame.Rect(14, 14, SCREEN_W - 28, SCREEN_H - 28), 2, 12)
-        draw_rect(screen, C((168, 128, 86)),
-                  pygame.Rect(20, 20, SCREEN_W - 40, SCREEN_H - 40), 1, 10)
-        # 淡棋盘水印（铺了自定义图就不画，免得细线压在画上显脏）
-        if boot_img is None:
-            for k in range(1, 9):
-                x = MARGIN + k * CELL
-                pygame.draw.line(screen, C((206, 184, 150)), (x, cy - 210), (x, cy + 210), 1)
-            for k in range(1, 7):
-                y = cy - 180 + k * 60
-                pygame.draw.line(screen, C((206, 184, 150)), (cx - 200, y), (cx + 200, y), 1)
-
-        # 印章底：四字全落定后描边、盖一下
-        landed = min(4, int(max(0.0, t - 0.12) / 0.16))
-        done_t = 0.12 + 3 * 0.16 + 0.28
-        if t >= done_t - 0.05:
-            k = min(1.0, max(0.0, (t - (done_t - 0.05)) / 0.18))
-            pop = 1.0 + 0.06 * (1 - k)
-            w = int(box.w * pop)
-            b = pygame.Rect(cx - w // 2, cy - w // 2, w, w)
-            draw_rect(screen, (176, 52, 48), b, 0, 8)
-            draw_rect(screen, (252, 240, 212), b.inflate(-10, -10), 2, 5)
-        for i in range(landed + (1 if 0 <= t - 0.12 - landed * 0.16 < 0.34 else 0)):
-            if i > 3:
-                break
-            start = 0.12 + i * 0.16
-            k = max(0.0, min(1.0, (t - start) / 0.30))
-            ease = 1 - (1 - k) ** 3
-            dy = int(-150 * (1 - ease))
-            sc = 1.22 - 0.22 * ease
-            g = (glyphs or [None] * 4)[i]
-            if g is None:
-                continue
-            try:
-                gg = pygame.transform.rotozoom(g, 0, sc) if abs(sc - 1) > 0.01 else g
-                gg.set_alpha(int(255 * min(1.0, k * 2.2)))
-                screen.blit(gg, (cells[i][0] + 44 - gg.get_width() // 2,
-                                 cells[i][1] + 44 - gg.get_height() // 2 + dy))
-            except (pygame.error, ValueError):
-                pass
-
-        # 进度条 + 提示
-        bar = pygame.Rect(cx - 130, cy + 150, 260, 6)
-        draw_rect(screen, C((214, 196, 166)), bar, 0, 3)
-        prog = min(1.0, max(0.05, t / min_seconds))
-        draw_rect(screen, (176, 52, 48),
-                  pygame.Rect(bar.x, bar.y, max(6, int(bar.w * prog)), bar.h), 0, 3)
-        if font_small:
-            try:
-                tip = font_small.render("正在摆局，请稍候", True, C((112, 84, 58)))
-                screen.blit(tip, (cx - tip.get_width() // 2, cy + 170))
-                ver = font_small.render("中国象棋 · 智算单机版 v%s" % VERSION,
-                                        True, C((132, 106, 78)))
-                screen.blit(ver, (cx - ver.get_width() // 2, SCREEN_H - 76))
-            except (pygame.error, AttributeError):
-                pass
-
-        # 收尾淡出到主页底色，衔接不硬切
-        if t > min_seconds - 0.22:
-            k = min(1.0, (t - (min_seconds - 0.22)) / 0.22)
-            veil.set_alpha(int(255 * k))
-            screen.blit(veil, (0, 0))
-        present()
-        frame += 1
-        pygame.time.wait(12)
-        ready = step >= len(steps)
-        # 只按「准备活做完 + 最短时长」收尾，不被后台任务拖长。
-        if (t >= min_seconds and ready) or t >= max_seconds:
-            break
-    gate["last"] = max(gate["last"], time.perf_counter() - 0.34)
-    return frame
 
 
 def bg_prepare(fn, splash=None, msg=None):
@@ -8323,6 +7764,12 @@ def main():
         if name == "settings":
             S["settings_msg"] = ""        # 每次打开都干净起手，不带上次的回执
             _MUSIC_CACHE.clear()          # v2.22：权限状态变了就重新扫公共目录
+            # v2.23：只在用户主动进设置时问一次权限，别在启动时弹窗挡屏幕。
+            if IS_ANDROID and not S.get("storage_asked"):
+                S["storage_asked"] = True
+                S["settings_msg"] = ("若弹出权限窗口请点「允许」，关掉设置再进一次，"
+                                     "就能看到自己放进「中国象棋」的曲子。")
+                request_storage_permissions()
         if name == "instructions":
             S["help_page"] = 0            # 每次都从第一页看起
         if name == "import":
@@ -9074,6 +8521,7 @@ def main():
     # 前 0.65 秒硬吞，之后按「还有没有手指没抬 / 最后输入后静默多久」放行，
     # 总上限 1.8 秒，退出 / 返回键始终不拦。
     input_gate = {"down": 0, "last": time.perf_counter()}
+    gate_released = False             # v2.23：放行那一刻再清一次残留事件
     gate_deadline = 0.0
     hard_gate_until = 0.0
     home_shown_at = None        # v2.20：主页首帧真正上屏的时刻，门禁从这一刻算起
@@ -9133,10 +8581,9 @@ def main():
             home_shown_at = time.perf_counter()
             hard_gate_until = home_shown_at + 1.2
             gate_deadline = home_shown_at + 2.6
-        elif frame_no == 90 and IS_ANDROID:
-            # 主菜单稳下来之后（约 1.5 秒）再申请存储权限，不跟启动抢时间。
-            # 拿到权限后才能读「内部存储/中国象棋/曲」；拿不到就只用内置曲。
-            request_storage_permissions()
+        # v2.23：不再在启动时弹权限窗口。原来第 90 帧弹系统对话框时，
+        # 音乐线程照常响、主界面却等用户处理弹窗，看起来就是「屏幕无反应只有声音」。
+        # 改为用户主动进设置要换曲时才问，启动路径彻底不碰权限。
         if S.get("quit_requested"):
             running = False
             break
@@ -9222,6 +8669,18 @@ def main():
                           if ev.type not in INPUT_ALL_TYPES
                           or (ev.type == pygame.KEYDOWN
                               and getattr(ev, "key", None) == _back)]
+            elif not gate_released:
+                # v2.23：门禁刚放行的这一帧，SDL 里可能还压着闪屏期间那一下的
+                # MOUSEBUTTONUP / FINGERMOTION。清掉再处理，就不会「最后一刻漏指点」。
+                gate_released = True
+                try:
+                    pygame.event.clear()
+                except pygame.error:
+                    pass
+                events = []
+                S["drag"] = None
+                S["selected"] = None
+                S["move_hints"] = []
         if events and not S.get("lib_ready"):
             sync_library()          # 此时后台通常已读完，立即返回，不阻塞
         try:
