@@ -385,7 +385,7 @@ def load_font(size):
 
 
 # ---------------------------- 版本 / 创作者 / 设置项 ----------------------------
-VERSION = "2.25"
+VERSION = "2.26"
 APP_NAME = "中国象棋-智算单机版"
 CREATOR = "songyq"     # 主页右下角标注；
 TIME_OPTIONS = [5, 10, 20, 30, 60]    # 对战时间（分钟）
@@ -1869,6 +1869,15 @@ def ai_best_move(board, color, level=2, budget=None, banned=None):
         if kill is not None and kill not in banned:
             _last_depth = max(_last_depth, 1)
             return kill
+
+    # v2.26：两步杀。残局子少（穷举快）时先扫一遍：无论对方怎么应都能下一手将死，
+    # 这种杀搜索在浅层常漏掉，穷举能稳拿。约 30ms，相对预算可忽略；中局不开销。
+    # 仅困难 / 大师（level>=4）启用，简单 / 普通留给新手。
+    if level >= 4 and len(board) <= 20:
+        kill2 = find_mate_in_two(board, color)
+        if kill2 is not None and kill2 not in banned:
+            _last_depth = max(_last_depth, 2)
+            return kill2
 
     # 开局照着谱走：省时间、不跑偏。「简单」难度故意不查库，留点破绽给新手。
     if level >= 2:
@@ -4399,11 +4408,13 @@ def repeat_cycle_verdict(pos_log, key, mover, enemy, seen=None):
 
 def rule_verdict(rep_counts, key, quiet_halfmoves, check_streak, mover, enemy):
     """走完一步后的规则判定：返回 (类型, 结果说明) 或 None
-    类型：long_check（长将判负）/ quiet（六十回合无吃子）
-    注：v1.2 起「三次重复局面」不再判和，改为走子前禁止重复（见 banned_repeats）"""
-    if check_streak.get(mover, 0) >= LONG_CHECK_STEPS:
-        return ("long_check",
-                "%s胜 —— %s长将判负" % (name_of(enemy), name_of(mover)))
+    类型：quiet（六十回合无吃子）
+    注①：v1.2 起「三次重复局面」不再在这里判和，改由 repeat_cycle_verdict
+         按整轮循环裁决（走子前还经 banned_repeats 禁重复）。
+    注②：v2.26 撤销旧的「连续将军 6 步判长将负」。那条规则不看局面是否重复，
+         几个棋子轮换着将、局面一路在变也会被误判长将负（主人实测反馈）。
+         长将的正规判据是「同一局面第 3 次出现且这一轮一方每着都在将军」，
+         已由 repeat_cycle_verdict 完整覆盖，这里不再重复判。"""
     if quiet_halfmoves >= QUIET_HALFMOVES:
         return ("quiet", "和棋 —— 六十回合无吃子")
     return None
@@ -4783,6 +4794,29 @@ def find_mate_in_one(board, turn):
 def mate_in_one(board, turn):
     """先手方有没有「一步将死」——有的话这局基本一眼能看出来"""
     return find_mate_in_one(board, turn) is not None
+
+
+def find_mate_in_two(board, turn):
+    """两步杀的起手（没有则 None）：走这一手 a 后，无论对方怎么应，
+    我下一手都能一步将死。残局里搜索常在浅层漏掉这种杀，穷举一次白拿。
+    耗时约 30ms（中局）/ 更少（残局），相对大师档 5.5 秒预算可忽略。
+    """
+    enemy = opponent(turn)
+    for a in legal_moves(board, turn):
+        child = apply_move(board, *a)
+        # 我自己这一手若已被将死，不是杀
+        if not legal_moves(child, enemy):
+            # 对方无着可动：若被我将死则其实是一步杀（上面已处理），否则困毙也不算两步杀
+            continue
+        ok = True
+        for b in legal_moves(child, enemy):
+            grand = apply_move(child, *b)
+            if find_mate_in_one(grand, turn) is None:
+                ok = False
+                break
+        if ok:
+            return a
+    return None
 
 
 def entry_difficulty(entry):
@@ -6395,7 +6429,7 @@ HELP_PARAS = [
     "轮到谁走，谁的将 / 帅旁边就亮一只圆表，指针转一圈是这一手的限时，圈心写剩余秒数。"
     "底部上排：悔棋 / 提示 / 复盘 / 存局；下排：认输 / 提和 / 棋谱 / 重开。"
     "「提示」让程序后台想一手标在盘上；「复盘」可以一步步回看。将死、困毙分胜负，"
-    "六十回合无吃子判和。",
+    "重复连续将三次判负，六十回合无吃子判和。",
     "【残局库】主页点「残局库」进入。顶部能按 全部 / 经典残局 / 江湖排局 / 自定残局 / 收藏 切换，"
     "旁边有搜索框（输局号或名字），还有「导出库 / 导入库 / 恢复」三个按钮。"
     "点一行载入这一局；点行尾 ★ 收藏、× 删除（点两次确认）。"
@@ -6466,8 +6500,7 @@ def help_paras():
                  "卸载不会清掉），装完新版点「导入库」找回。")
         elif p.startswith("【开机画面】"):
             p = ("【开机画面】开机最早那一闪「楚汉象棋·一局定天下」是打进安装包的古典图，装好后换不了；"
-                 "它后面不再有入场动画，直接就是主页，启动比以前快。手机上换图、换曲子都取消了，"
-                 "不用再折腾文件目录。")
+                 "它后面不再有入场动画，直接就是主页，启动比以前快。不用再折腾文件目录。")
         # 手机版把「电脑」都改口成「手机」：同一个手机里没有电脑这回事，
         # 只有「数据线连电脑」那句说的是真的电脑，先护住再换。
         p = p.replace("数据线连电脑", "\x00PC\x00")
