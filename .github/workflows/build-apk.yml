@@ -1,9 +1,11 @@
 name: 打包安卓 APK
 
-# 推送即构建，也可在 Actions 页面点 Run workflow 手动触发
+# 只保留手动触发：网页端逐个上传文件时每次提交都是一次 push，
+# 若挂 push 触发，会出现「根目录文件传完就开编、.github/workflows/ 与
+# keystore/ 子目录文件还没传」的半成品编译。
+# 请把所有文件（含子目录）全部传完、Commit 后，再到 Actions 页面
+# 点 Run workflow 手动跑一次。
 on:
-  push:
-    branches: [main, master]
   workflow_dispatch:
 
 jobs:
@@ -94,25 +96,31 @@ jobs:
       - name: 固定签名（可覆盖安装）
         run: |
           mkdir -p ~/.android
+          # v2.22：网页上传不好建 keystore 子目录，所以把同一份固定签名
+          # 以 base64 内嵌在流程里：仓库里有文件就用文件，没有就还原内嵌那份。
+          # 两条路的指纹完全一致，再也不会随机生成调试签名。
           if [ -f keystore/debug.keystore ]; then
-            rm -f ~/.android/debug.keystore
-            if keytool -importkeystore -noprompt \
-                 -srckeystore keystore/debug.keystore -srcstoretype PKCS12 -srcstorepass android \
-                 -destkeystore ~/.android/debug.keystore -deststoretype JKS \
-                 -deststorepass android -destkeypass android \
-               && keytool -list -keystore ~/.android/debug.keystore -storepass android \
-                  | grep -qi androiddebugkey; then
-              echo "已转出 JKS，别名 androiddebugkey 核对通过"
-            else
-              cp keystore/debug.keystore ~/.android/debug.keystore
-              echo "转换或别名核对未过，改为直接使用仓库里的 PKCS12 keystore"
-            fi
-            chmod 600 ~/.android/debug.keystore
-            echo "--- keystore 内容 ---"
-            keytool -list -keystore ~/.android/debug.keystore -storepass android | head -8
+            echo "使用仓库里的 keystore/debug.keystore"
           else
-            echo "::warning::仓库里没有 keystore/debug.keystore，本轮签名仍会随机生成"
+            mkdir -p keystore
+            printf '%s' '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' | base64 -d > keystore/debug.keystore
+            echo "仓库里没有 keystore 文件，已用流程内嵌的固定签名还原"
           fi
+          rm -f ~/.android/debug.keystore
+          if keytool -importkeystore -noprompt \
+               -srckeystore keystore/debug.keystore -srcstoretype PKCS12 -srcstorepass android \
+               -destkeystore ~/.android/debug.keystore -deststoretype JKS \
+               -deststorepass android -destkeypass android \
+             && keytool -list -keystore ~/.android/debug.keystore -storepass android \
+                | grep -qi androiddebugkey; then
+            echo "已转出 JKS，别名 androiddebugkey 核对通过"
+          else
+            cp keystore/debug.keystore ~/.android/debug.keystore
+            echo "转换或别名核对未过，改为直接使用 PKCS12 keystore"
+          fi
+          chmod 600 ~/.android/debug.keystore
+          echo "--- keystore 内容 ---"
+          keytool -list -keystore ~/.android/debug.keystore -storepass android | head -8
 
       - name: 装 buildozer
         run: |
